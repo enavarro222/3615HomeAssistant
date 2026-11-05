@@ -1,9 +1,12 @@
 """Les courbes : des valeurs dans le temps, tracées en mosaïque. Sans entrée ni sortie.
 
-Une courbe couvre la durée de sa carte (`hours_to_show`) en 80 points, deux par caractère, sur
-4 rangées de mosaïque, soit 12 niveaux. Elle avance comme un oscilloscope : un curseur balaie
-l'écran de gauche à droite et réécrit un point à la fois, ce qui ne coûte que quelques octets.
-Redessiner toute la courbe à chaque point ne tiendrait pas à 1200 bauds.
+Une courbe couvre la durée de sa carte (`hours_to_show`) en 68 points, deux par caractère, sur
+4 rangées de mosaïque, soit 12 niveaux. Elle défile : le point le plus récent est toujours au
+bord droit, contre l'axe qui porte l'échelle, et tout glisse d'un cran vers la gauche à chaque
+point. Sous la courbe, la durée qu'elle couvre : « -15 min ...... maintenant ».
+
+Défiler, c'est redessiner toute la courbe à chaque point : environ 160 octets, plus d'une
+seconde à 1200 bauds. D'où un point toutes les 5 s au plus.
 """
 
 from __future__ import annotations
@@ -14,18 +17,22 @@ from dataclasses import dataclass, field
 
 from . import videotex as vt
 
-POINTS = vt.WIDTH * 2
+AXIS_WIDTH = 5
+"""Les bornes de l'échelle, à droite de la courbe : « 1500 », « 0 »."""
+
+COLUMNS = vt.WIDTH - 1 - AXIS_WIDTH
+"""Les colonnes de la courbe ; la suivante porte le trait de l'axe."""
+
+POINTS = COLUMNS * 2
 ROWS = 4
 LEVELS = ROWS * 3
-GAP = 2
-"""Les points vides devant le curseur : on voit où en est le balayage."""
 
-MIN_PERIOD = 1.0
-"""Au plus un point par seconde : le Minitel ne suivrait pas plus vite."""
+MIN_PERIOD = 5.0
+"""Au plus un point toutes les 5 s : chaque point redessine la courbe."""
 
-LIVE_PERIOD = 10.0
-"""En dessous, un point par période est trop court pour attendre le relevé de l'intégration :
-on demande à Home Assistant de relever l'entité à chaque point."""
+LIVE_PERIOD = 30.0
+"""En dessous, un point par période est trop court pour attendre le relevé de l'intégration
+(souvent toutes les 30 s) : on demande à Home Assistant de relever l'entité à chaque point."""
 
 
 def period(hours: float) -> float:
@@ -61,24 +68,18 @@ class Series:
 
 
 def points(series: Series | None, step: float, now: float) -> list[float | None]:
-    """Les 80 points à l'écran : le point n est à la place n mod 80, le plus récent au curseur.
+    """Les points à l'écran, du plus ancien (à gauche) au plus récent (contre l'axe).
 
     Chaque point prend la valeur en fin de sa période, celle de maintenant pour le dernier.
     """
-    out: list[float | None] = [None] * POINTS
     if series is None:
-        return out
+        return [None] * POINTS
     current = math.floor(now / step)
-    for n in range(current - POINTS + 1 + GAP, current + 1):
+    out: list[float | None] = []
+    for n in range(current - POINTS + 1, current + 1):
         moment = min((n + 1) * step, now)
-        if moment > series.since:
-            out[n % POINTS] = series.at(moment)
+        out.append(series.at(moment) if moment > series.since else None)
     return out
-
-
-def cursor(step: float, now: float) -> int:
-    """La place du point le plus récent."""
-    return math.floor(now / step) % POINTS
 
 
 def scale(values: list[float | None]) -> tuple[float, float]:
@@ -119,15 +120,17 @@ def level(value: float | None, low: float, high: float) -> int:
 
 # Les gros points d'un caractère mosaïque, de haut en bas : (gauche, droite).
 _DOTS = ((0x01, 0x02), (0x04, 0x08), (0x10, 0x40))
+AXIS = 0x20 | 0x01 | 0x04 | 0x10
+"""Le trait vertical de l'axe : la colonne de gauche d'un caractère mosaïque."""
 
 
 def mosaic(values: list[float | None], low: float, high: float) -> list[bytes]:
-    """Les 4 rangées de la courbe, en aire pleine : un octet G1 par colonne, sans SO ni SI."""
+    """Les 4 rangées de la courbe en aire pleine, puis l'axe : un octet G1 par colonne."""
     levels = [level(v, low, high) for v in values]
     rows = []
     for row in range(ROWS):
         cells = bytearray()
-        for col in range(vt.WIDTH):
+        for col in range(COLUMNS):
             code = 0x20
             for k, (left, right) in enumerate(_DOTS):
                 needed = (ROWS - 1 - row) * 3 + (3 - k)  # niveau de ce gros point, de 1 à 12
@@ -136,8 +139,21 @@ def mosaic(values: list[float | None], low: float, high: float) -> list[bytes]:
                 if levels[2 * col + 1] >= needed:
                     code |= right
             cells.append(code)
+        cells.append(AXIS)
         rows.append(bytes(cells))
     return rows
+
+
+def span(hours: float) -> str:
+    """La durée couverte, à gauche sous la courbe : « -80 s », « -15 min », « -24 h », « -7 j »."""
+    seconds = period(hours) * POINTS
+    if seconds < 120:
+        return f"-{seconds:.0f} s"
+    if seconds < 2 * 3600:
+        return f"-{seconds / 60:.0f} min"
+    if seconds < 3 * 86400:
+        return f"-{seconds / 3600:.0f} h"
+    return f"-{seconds / 86400:.0f} j"
 
 
 def value(state: str) -> float | None:

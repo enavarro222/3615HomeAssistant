@@ -528,34 +528,41 @@ def mosaic_dots(minitel):
     return sum(
         bin(minitel.screen.mosaic_code(row, col) or 0x20).count("1") - 1
         for row in range(TOP + 1, TOP + 5)
-        for col in range(1, 41)
+        for col in range(1, graph.COLUMNS + 1)
     )
 
 
-def test_a_short_graph_starts_from_history_moves_and_is_polled(monkeypatch):
+def updates(fake):
+    return [c for c in fake.service_calls if c["service"] == "update_entity"]
+
+
+def test_a_short_graph_starts_from_history_scrolls_and_is_polled(monkeypatch):
     monkeypatch.setattr(graph, "MIN_PERIOD", STEP)
     fake = graph_fake(STEP * graph.POINTS / 3600 / 2)  # plus court que le minimum : un point par STEP
 
     async def scenario(minitel, fake):
-        assert minitel.row(TOP) == line("   Debit (0 a 100)", "100 KiB/s")
+        assert minitel.row(TOP) == line("   Debit", "100 KiB/s")
+        assert minitel.row(TOP + 1)[graph.COLUMNS + 1 :] == "100"  # l'échelle, sur l'axe
+        assert minitel.row(TOP + 4)[graph.COLUMNS + 1 :] == "0"
+        assert minitel.row(TOP + 5).endswith(" maintenant")
         assert fake.history_requests[0]["entity_ids"] == ["sensor.debit"]
         assert mosaic_dots(minitel) > 0  # 80, puis 100 : la courbe part de l'historique
+        dots = mosaic_dots(minitel)
 
         await asyncio.sleep(3 * STEP)
         await minitel.settle()
-        polls = [c for c in fake.service_calls if c["service"] == "update_entity"]
+        polls = updates(fake)
         assert polls and polls[0]["domain"] == "homeassistant"
         assert polls[0]["target"] == {"entity_id": "sensor.debit"}
-
-        # Le balayage ne renvoie que quelques cases à chaque point.
-        before = len(minitel.received)
-        await asyncio.sleep(4 * STEP)
-        await minitel.settle()
-        assert 0 < len(minitel.received) - before < 4 * 40
+        assert mosaic_dots(minitel) > dots  # la courbe s'allonge vers la gauche
 
         await fake.set_state("sensor.debit", "400")
         await minitel.settle()
-        assert minitel.row(TOP) == line("   Debit (0 a 400)", "400 KiB/s")
+        assert minitel.row(TOP) == line("   Debit", "400 KiB/s")
+        assert minitel.row(TOP + 1)[graph.COLUMNS + 1 :] == "400"
+        # Le dernier point, moitié droite de la dernière colonne, monte jusqu'en haut.
+        right = 0x02 | 0x08 | 0x40
+        assert (minitel.screen.mosaic_code(TOP + 1, graph.COLUMNS) or 0) & right == right
 
     call(scenario, fake)
 
@@ -565,9 +572,34 @@ def test_a_long_graph_is_not_polled(monkeypatch):
     fake = graph_fake(24)
 
     async def scenario(minitel, fake):
-        assert minitel.row(TOP) == line("   Debit (0 a 100)", "100 KiB/s")
+        assert minitel.row(TOP) == line("   Debit", "100 KiB/s")
+        assert minitel.row(TOP + 5).startswith("-24 h ")
         assert mosaic_dots(minitel) > 0
         await asyncio.sleep(3 * STEP)
-        assert not [c for c in fake.service_calls if c["service"] == "update_entity"]
+        assert not updates(fake)
+
+    call(scenario, fake)
+
+
+def test_a_gauge_shows_its_value_big_and_is_polled(monkeypatch):
+    monkeypatch.setattr(session_module, "GAUGE_PERIOD", STEP)
+    fake = FakeHass()
+    card = {"type": "gauge", "entity": "sensor.debit", "name": "Debit", "min": 0, "max": 1000}
+    fake.add_dashboard("reseau", "Reseau", {"views": [{"title": "Reseau", "cards": [card]}]})
+    fake.system_data = {"default_panel": "reseau"}
+    fake.states = {"sensor.debit": ("500", {"unit_of_measurement": "KiB/s"})}
+
+    async def scenario(minitel, fake):
+        assert minitel.row(TOP + 1).startswith("   Debit")
+        assert minitel.row(TOP + 1).endswith("500 KiB/s")
+        # 50 % de 29 cases : 14 pleines et une demie (0x35, « 5 »).
+        assert minitel.row(TOP + 2) == "    0 " + chr(0x7F) * 14 + "5" + " " * 14 + " 1000"
+        await asyncio.sleep(3 * STEP)
+        await minitel.settle()
+        assert len(updates(fake)) >= 2
+
+        await fake.set_state("sensor.debit", "1000")
+        await minitel.settle()
+        assert minitel.row(TOP + 2) == "    0 " + chr(0x7F) * 29 + " 1000"
 
     call(scenario, fake)

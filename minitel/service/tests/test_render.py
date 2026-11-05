@@ -1,6 +1,6 @@
 import pytest
 
-from minitel_ha import render
+from minitel_ha import graph, render
 from minitel_ha import videotex as vt
 from minitel_ha.dashboard import Glance, Heading, Item, StateIs, View
 from minitel_ha.hass import EntityState
@@ -195,11 +195,13 @@ def test_render_rows():
     assert out.is_inverse(6, 40)
     assert out.row_text(7) == "   Dedans                         21,5?C"
     assert out.row_text(8) == "Ici          21,5?C La           ALLUME"
-    # La jauge : 40 % de 10 cases, en mosaïque pleine (0x7F).
-    assert out.row_text(9).startswith("   Pile")
-    assert out.row_text(9).endswith(chr(0x7F) * 4 + " " * 6 + " 40%")
-    assert out.row_text(10) == " 2 Absente                            HS"
-    assert rows[9].count(bytes((vt.SO,))) == 1 and rows[9].count(bytes((vt.SI,))) == 1
+    # La jauge : la valeur en double taille, puis 40 % de 30 cases en mosaïque pleine (0x7F).
+    assert rows[9] == b""
+    assert render.is_double(rows[10])
+    assert out.row_text(10) == "   Pile".ljust(34) + "40%"
+    assert out.row_text(11) == "    0 " + chr(0x7F) * 12 + " " * 18 + " 100"
+    assert rows[11].count(bytes((vt.SO,))) == 1 and rows[11].count(bytes((vt.SI,))) == 1
+    assert out.row_text(12) == " 2 Absente                            HS"
 
 
 def test_render_big_value_leaves_the_row_above_blank():
@@ -218,30 +220,43 @@ def test_long_names_never_overflow_on_the_value():
     assert out.row_text(5) == " 1 " + "n" * 26 + " OUVERT 55%"
 
 
-def test_a_graph_is_a_label_then_four_mosaic_rows():
-    item = Item("sensor.debit", "Debit", "graph", hours=1)
+def test_a_graph_is_a_label_four_mosaic_rows_and_its_span():
+    item = Item("sensor.debit", "Debit", "graph", hours=0.25)
     screen = screens(View("Reseau", (item,)), {})[0]
-    assert screen.lines[0].height == 5
+    assert screen.lines[0].height == 6
     states = {"sensor.debit": S("1117.6", unit_of_measurement="KiB/s")}
-    points = [1117.6, 1117.6, 3.0] + [None] * 77
+    points = [None] * (graph.POINTS - 3) + [3.0, 1117.6, 1117.6]
     rows = render.render(screen, states, {item: points})
-    assert sorted(rows) == [5, 6, 7, 8, 9]
+    assert sorted(rows) == [5, 6, 7, 8, 9, 10]
     label = rows[5]
     assert isinstance(label, render.Zoned)
     assert [col for col, _ in label.zones] == [1, 25]
     assert all(isinstance(rows[row], render.Mosaic) for row in range(6, 10))
-    screen_ = Screen()
+    out = Screen()
     for row, content in rows.items():
-        screen_.feed(vt.pos(row) + content)
-    assert screen_.row_text(5) == "   Debit (0 a 1500)".ljust(28) + "1117,6 KiB/s"
-    assert screen_.mosaic_code(9, 1) == 0x7F  # 1117,6 sur 1500 : le bas plein…
-    assert screen_.mosaic_code(9, 2) == 0x30  # 3 : un seul gros point, en bas à gauche…
-    assert screen_.mosaic_code(9, 3) == 0x20  # … et rien après
-    assert screen_.mosaic_code(6, 1) == 0x20  # 9 niveaux sur 12 : la rangée du haut vide
-    assert screen_.mosaic_code(5, 1) is None  # le libellé n'est pas en mosaïque
+        out.feed(vt.pos(row) + content)
+    assert out.row_text(5) == "   Debit".ljust(28) + "1117,6 KiB/s"
+    # Le plus récent contre l'axe, à droite ; l'échelle sur l'axe.
+    assert out.mosaic_code(9, 34) == 0x7F  # 1117,6 sur 1500 : le bas plein…
+    assert out.mosaic_code(9, 33) == 0x20 | 0x40  # … 3 : un seul gros point, en bas à droite…
+    assert out.mosaic_code(9, 32) == 0x20  # … et rien avant
+    assert out.mosaic_code(6, 34) == 0x20  # 9 niveaux sur 12 : la rangée du haut vide
+    assert out.mosaic_code(5, 1) is None  # le libellé n'est pas en mosaïque
+    assert out.mosaic_code(6, 35) == graph.AXIS
+    assert out.row_text(6)[35:] == "1500"
+    assert out.row_text(9)[35:] == "0"
+    assert out.mosaic_code(6, 36) is None
+    assert out.row_text(10) == "-15 min " + "." * 15 + " maintenant"
 
 
 def test_a_graph_without_points_is_empty():
     item = Item("sensor.debit", "Debit", "graph")
     rows = render.render(screens(View("Reseau", (item,)), {})[0], {})
-    assert rows[6] == render.Mosaic(b" " * 40)
+    assert rows[6].cells == b" " * graph.COLUMNS + bytes((graph.AXIS,))
+
+
+@pytest.mark.parametrize(
+    ("number", "expected"), [(1500, "1500"), (0.5, "0,5"), (20000, "20000"), (200000, "200k")]
+)
+def test_scale_bounds_are_short(number, expected):
+    assert render._short(number) == expected

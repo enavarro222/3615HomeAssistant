@@ -2,8 +2,8 @@
 
 L'écran suit Home Assistant en direct : à chaque changement, on recalcule les rangées et on
 n'envoie que celles qui diffèrent de ce qui est affiché. À 1200 bauds, c'est ce qui compte.
-Les courbes avancent seules, un point à la fois, et leurs entités sont relevées à chaque point
-quand la courbe est courte.
+Les courbes défilent seules, un point à la fois, et leurs entités sont relevées à chaque point
+quand la courbe est courte. Les jauges sont relevées toutes les 10 s.
 """
 
 from __future__ import annotations
@@ -26,6 +26,9 @@ log = logging.getLogger("minitel_ha")
 
 # Un appel oublié garderait le Minitel en ligne : on raccroche au bout de 10 min.
 IDLE_TIMEOUT = 600
+
+GAUGE_PERIOD = 10.0
+"""Une jauge est relevée toutes les 10 s : bien des intégrations ne répondent pas plus vite."""
 
 SUBTITLE_ROW = 3
 RULE_ROW = CONTENT_TOP + CONTENT_ROWS
@@ -79,6 +82,7 @@ class Session:
         self._confirm: tuple[Item, Action] | None = None
         self._series: dict[str, graph.Series] = {}
         self._polls: dict[str, asyncio.Task[None]] = {}
+        self._polled: dict[str, float] = {}
 
     async def run(self) -> None:
         loop = asyncio.get_running_loop()
@@ -422,23 +426,42 @@ class Session:
                     state = self._hass.states.get(entity_id)
                     self._series[entity_id].add(now, graph.value(state.state) if state else None)
 
+    def _live(self) -> dict[str, float]:
+        """Les entités à relever d'elles-mêmes, et tous les combien : jauges, courbes courtes."""
+        live: dict[str, float] = {}
+        for line in self._screen.lines:
+            item = line.element
+            if not isinstance(item, Item):
+                continue
+            if item.style == "bar":
+                every = GAUGE_PERIOD
+            elif item.style == "graph" and graph.period(item.hours) <= graph.LIVE_PERIOD:
+                every = graph.period(item.hours)
+            else:
+                continue
+            live[item.entity_id] = min(every, live.get(item.entity_id, every))
+        return live
+
     async def _next_point(self) -> None:
-        """Attend le prochain point d'une courbe à l'écran. Sans courbe, attend sans fin."""
+        """Attend le prochain point d'une courbe, ou le prochain relevé. Sinon, attend sans fin."""
         steps = [graph.period(item.hours) for item in self._graph_items()]
+        steps += self._live().values()
         if not steps or self._place.guide:
             await asyncio.Event().wait()
         now = time.time()
         await asyncio.sleep(min(step - now % step for step in steps) + 0.01)
 
     async def _advance(self) -> None:
-        """Le curseur des courbes avance d'un point."""
+        """Les courbes défilent d'un point, et ce qui doit l'être est relevé."""
         now = time.time()
+        for entity_id, every in self._live().items():
+            if now - self._polled.get(entity_id, 0) >= every * 0.9:
+                self._polled[entity_id] = now
+                self._poll(entity_id)
         windows: dict[str, float] = {}
         for item in self._graph_items():
             step = graph.period(item.hours)
             windows[item.entity_id] = max(windows.get(item.entity_id, 0), step * (graph.POINTS + 1))
-            if step <= graph.LIVE_PERIOD:
-                self._poll(item.entity_id)
         for entity_id, window in windows.items():
             if entity_id in self._series:
                 self._series[entity_id].forget_before(now - window)
@@ -485,7 +508,10 @@ class Session:
 def _row_update(row: int, old: bytes, new: bytes) -> bytes:
     """Ce qu'il faut envoyer pour passer de l'ancienne rangée à la nouvelle."""
     if isinstance(old, render.Mosaic) and isinstance(new, render.Mosaic):
-        return _mosaic_update(row, old.cells, new.cells)
+        update = _mosaic_update(row, old.cells, new.cells)
+        if new.tail != old.tail:
+            update += vt.pos(row, len(new.cells) + 1) + new.tail
+        return update
     if (
         isinstance(old, render.Zoned)
         and isinstance(new, render.Zoned)

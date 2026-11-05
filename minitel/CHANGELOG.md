@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.0
+
+- **Les courbes défilent** : le point le plus récent est toujours à droite, contre un axe qui porte l'échelle, et la durée couverte est écrite en dessous. Au plus un point toutes les 5 s.
+- **Les jauges** prennent la largeur de l'écran, avec la valeur en double taille et les bornes de la carte, et leur entité est relevée toutes les 10 s.
+
 ## 0.4.0
 
 - **Courbes en mosaïque** : les cartes de graphique (Capteur avec graphique, Graphique d'historique, `mini-graph-card`…) deviennent des courbes, tirées de l'historique, qui avancent en direct comme un oscilloscope. Une courbe courte fait relever son entité à chaque point, jusqu'à une fois par seconde.

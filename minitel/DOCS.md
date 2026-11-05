@@ -49,7 +49,7 @@ Les modifications du tableau de bord arrivent sur le Minitel en direct, sans red
 | carte Coup d'œil, pastilles de la vue | des valeurs sur deux colonnes |
 | carte Capteur | la valeur en grand ; avec un graphique, une courbe |
 | carte Graphique d'historique ou de statistiques, `mini-graph-card` | une courbe pour la première entité, les autres en lignes |
-| carte Jauge | une jauge en mosaïque |
+| carte Jauge | la valeur en grand sur une jauge, relevée toutes les 10 s |
 | piles, grilles, carte conditionnelle | leur contenu, à plat |
 | visibilité selon un état (une section « porte ouverte ») | la section apparaît et disparaît sur le Minitel |
 | cartes tierces (`custom:`) qui nomment leurs entités | une ligne par entité |
@@ -59,9 +59,15 @@ Le nom vient de la carte (`name`), sinon de l'entité. Le Minitel n'a pas de maj
 
 #### Les courbes
 
-Une courbe couvre la durée de sa carte (`hours_to_show`, ou `days_to_show`) en 80 points, sur quatre rangées en mosaïque, sous une ligne qui donne son nom, son échelle et la valeur actuelle. Elle part de l'historique de Home Assistant, puis avance en direct : un curseur balaie l'écran de gauche à droite, comme sur un oscilloscope, et ne réécrit qu'un point à la fois. Il n'y a jamais plus d'un point par seconde, sinon le Minitel ne suivrait pas.
+Une courbe couvre la durée de sa carte (`hours_to_show`, ou `days_to_show`) en 68 points, sur quatre rangées en mosaïque. Au-dessus, son nom et sa valeur actuelle. À droite, l'axe, avec le haut et le bas de l'échelle. En dessous, la durée couverte : `-15 min ............... maintenant`.
 
-Les fractions d'heure sont acceptées : `hours_to_show: 0.02` donne un point par seconde, sur 80 secondes. Pour une courbe aussi courte (au plus 10 secondes par point, soit `hours_to_show: 0.22` ou moins), le Minitel demande à Home Assistant de relever l'entité à chaque point, tant que la courbe est à l'écran. Une intégration qui n'interroge l'appareil que toutes les 30 secondes suit alors à la seconde, comme le débit d'une box en UPnP. Ne le faites pas sur l'entité d'un service en ligne, qui limite ses requêtes.
+Elle part de l'historique de Home Assistant, puis défile : le point le plus récent est toujours contre l'axe, et tout glisse d'un cran vers la gauche à chaque point. Chaque point redessine la courbe, environ 160 octets, plus d'une seconde de ligne : il n'y a donc jamais plus d'un point toutes les 5 secondes.
+
+Les fractions d'heure sont acceptées : `hours_to_show: 0.25` donne un quart d'heure, un point toutes les 13 secondes. Pour une courbe courte (au plus 30 secondes par point, soit `hours_to_show: 0.56` ou moins), le Minitel demande à Home Assistant de relever l'entité à chaque point, tant que la courbe est à l'écran. Home Assistant ne relève pas une même intégration plus d'une fois toutes les 10 secondes : une courbe plus fine que ça ne montre que des paliers.
+
+#### Les jauges
+
+Une carte Jauge prend trois rangées : son nom et sa valeur en double taille, puis une barre sur presque toute la largeur, entre le `min` et le `max` de la carte. Tant qu'elle est à l'écran, le Minitel demande à Home Assistant de relever son entité toutes les 10 secondes. C'est ce qu'il faut pour un débit ou une puissance en direct ; ne mettez pas en jauge l'entité d'un service en ligne, qui limite ses requêtes.
 
 ## Le branchement
 

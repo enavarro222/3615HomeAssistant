@@ -3,8 +3,8 @@
 Une vue s'étale sur un ou plusieurs écrans de 16 rangées. Chaque écran numérote ses entités
 qu'on peut commander, de 1 à n. Le contenu de chaque rangée est rendu en octets Vidéotex :
 la session compare avec ce qui est déjà à l'écran, et n'envoie que ce qui change. Les rangées
-qui bougent sans cesse (une courbe, sa valeur) sont découpées en zones, pour n'en renvoyer
-qu'un morceau.
+qui bougent sans cesse (une courbe, sa valeur) sont découpées en zones ou en cases, pour n'en
+renvoyer qu'un morceau.
 """
 
 from __future__ import annotations
@@ -20,8 +20,8 @@ from .dashboard import Element, Glance, Heading, Item, View, is_visible, without
 CONTENT_TOP = 5
 CONTENT_ROWS = 16
 GLANCE_COLUMNS = 2
-BAR_WIDTH = 10
 VALUE_WIDTH = 16
+GAUGE_VALUE_WIDTH = 12
 
 
 class State(Protocol):
@@ -46,8 +46,10 @@ class Line:
     def height(self) -> int:
         if isinstance(self.element, Item) and self.element.style == "big":
             return 2
+        if isinstance(self.element, Item) and self.element.style == "bar":
+            return 3
         if isinstance(self.element, Item) and self.element.style == "graph":
-            return 1 + graph.ROWS
+            return 1 + graph.ROWS + 1
         return 1
 
 
@@ -123,13 +125,19 @@ class Zoned(bytes):
 
 
 class Mosaic(bytes):
-    """Une rangée de mosaïques, un caractère par colonne : on ne renvoie que ceux qui changent."""
+    """Une rangée de mosaïques, un caractère par colonne : on ne renvoie que ceux qui changent.
+
+    Après les mosaïques, `tail` : du texte de largeur fixe (une borne de l'échelle), renvoyé
+    en entier s'il change.
+    """
 
     cells: bytes
+    tail: bytes
 
-    def __new__(cls, cells: bytes) -> Mosaic:
-        self = super().__new__(cls, bytes((vt.SO,)) + cells + bytes((vt.SI,)))
+    def __new__(cls, cells: bytes, tail: bytes = b"") -> Mosaic:
+        self = super().__new__(cls, bytes((vt.SO,)) + cells + bytes((vt.SI,)) + tail)
         self.cells = cells
+        self.tail = tail
         return self
 
 
@@ -151,7 +159,9 @@ def render(screen: Screen, states: Mapping[str, State], graphs: Graphs | None = 
             rows[row] = b""
             rows[row + 1] = _big(row + 1, element, states)
         elif element.style == "bar":
-            rows[row] = _bar(row, line, states)
+            rows[row] = b""
+            rows[row + 1] = _big(row + 1, element, states, GAUGE_VALUE_WIDTH)
+            rows[row + 2] = _gauge(element, states)
         elif element.style == "graph":
             points = list((graphs or {}).get(element, [None] * graph.POINTS))
             rows.update(_graph(row, line, states, points))
@@ -199,36 +209,26 @@ def _glance(row: int, items: tuple[Item, ...], states: Mapping[str, State]) -> b
     return out
 
 
-def _big(row: int, item: Item, states: Mapping[str, State]) -> bytes:
+def _big(row: int, item: Item, states: Mapping[str, State], width: int = 9) -> bytes:
     state = states.get(item.entity_id)
-    value = _fit(describe(item.entity_id, state)[0], 9)
+    value = _fit(describe(item.entity_id, state)[0], width)
     col = vt.WIDTH - 2 * len(value) + 1
     name = _fit(name_of(item, state), col - 5)
     return vt.text("   " + name) + vt.pos(row, col) + vt.double_size(value)
 
 
-def _bar(row: int, line: Line, states: Mapping[str, State]) -> bytes:
-    item = line.element
-    assert isinstance(item, Item)
+def _gauge(item: Item, states: Mapping[str, State]) -> bytes:
+    """Sous la valeur, une jauge sur presque toute la largeur, entre ses bornes."""
     state = states.get(item.entity_id)
-    value = _fit(describe(item.entity_id, state)[0], 8)
-    value_col = vt.WIDTH - len(value) + 1
-    bar_col = value_col - BAR_WIDTH - 1
-    name = _fit(name_of(item, state), bar_col - 5)
     number = _number(state.state) if state else None
     low, high = item.bounds
     fraction = (number - low) / (high - low) if number is not None and high > low else 0.0
-    return (
-        vt.text("   " + name)
-        + vt.pos(row, bar_col)
-        + vt.bar(fraction, BAR_WIDTH)
-        + vt.pos(row, value_col)
-        + vt.text(value)
-    )
+    left, right = _short(low).rjust(5) + " ", " " + _short(high)
+    return vt.text(left) + vt.bar(fraction, vt.WIDTH - len(left) - len(right)) + vt.text(right)
 
 
 def _graph(row: int, line: Line, states: Mapping[str, State], points: list[float | None]) -> dict[int, bytes]:
-    """Le nom, l'échelle et la valeur, puis la courbe en dessous."""
+    """Le nom et la valeur, la courbe avec son échelle à droite, puis la durée en dessous."""
     item = line.element
     assert isinstance(item, Item)
     state = states.get(item.entity_id)
@@ -237,15 +237,28 @@ def _graph(row: int, line: Line, states: Mapping[str, State], points: list[float
     value = _fit(value, VALUE_WIDTH).rjust(VALUE_WIDTH)
     left = vt.WIDTH - VALUE_WIDTH
     prefix = f"{line.number:>2} " if line.number else "   "
-    bounds = f" ({_format_number(low, f'{low:g}')} a {_format_number(high, f'{high:g}')})"
-    name = _fit(name_of(item, state), left - len(prefix) - len(bounds) - 1)
-    label = _fit(prefix + name + bounds, left).ljust(left)
+    label = _fit(prefix + name_of(item, state), left - 1).ljust(left)
     rows: dict[int, bytes] = {
         row: Zoned(row, ((1, vt.text(label)), (left + 1, vt.inverse(value) if active else vt.text(value))))
     }
-    for index, cells in enumerate(graph.mosaic(points, low, high), 1):
-        rows[row + index] = Mosaic(cells)
+    bounds = {0: _short(high), graph.ROWS - 1: _short(low)}
+    for index, cells in enumerate(graph.mosaic(points, low, high)):
+        tail = bounds.get(index, "").ljust(graph.AXIS_WIDTH)
+        rows[row + 1 + index] = Mosaic(cells, vt.text(tail))
+    span, now = graph.span(item.hours), "maintenant"
+    dots = "." * (graph.COLUMNS - len(span) - len(now) - 2)
+    rows[row + 1 + graph.ROWS] = vt.text(f"{span} {dots} {now}")
     return rows
+
+
+def _short(number: float) -> str:
+    """Une borne d'échelle, en 5 caractères au plus : « 1500 », « 0,5 », « 20k »."""
+    text = _format_number(number, f"{number:g}")
+    for divisor, suffix in ((1e3, "k"), (1e6, "M"), (1e9, "G")):
+        if len(text) <= 5:
+            break
+        text = _format_number(number / divisor, f"{number / divisor:g}") + suffix
+    return text
 
 
 def _fit(value: str, width: int) -> str:
