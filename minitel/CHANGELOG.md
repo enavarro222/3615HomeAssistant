@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.0
+
+- **Courbes en mosaïque** : les cartes de graphique (Capteur avec graphique, Graphique d'historique, `mini-graph-card`…) deviennent des courbes, tirées de l'historique, qui avancent en direct comme un oscilloscope. Une courbe courte fait relever son entité à chaque point, jusqu'à une fois par seconde.
+- L'option `pages` (des lumières écrites à la main) disparaît : le tableau de bord la remplace. Une ancienne valeur est ignorée.
+
 ## 0.3.0
 
 - **Tableaux de bord** : le Minitel affiche un tableau de bord de Home Assistant, choisi dans l'option `dashboard`, ou celui par défaut. Ses vues forment le sommaire, ses cartes deviennent des lignes : lumières, interrupteurs, volets, thermostats, serrures, scènes, capteurs. Sans tableau de bord lisible, une page par pièce.
@@ -7,7 +12,6 @@
 - **Numéro + SUITE / RETOUR** : plus ou moins de lumière, de chauffage, d'ouverture de volet.
 - Les sections et cartes à visibilité conditionnelle (une porte ouverte…) apparaissent et disparaissent sur le Minitel.
 - **GUIDE** affiche l'aide des touches. La rangée du haut signale quand Home Assistant ne répond plus.
-- L'option `pages` (des lumières écrites à la main) disparaît : le tableau de bord la remplace. Une ancienne valeur est ignorée.
 
 ## 0.2.0
 

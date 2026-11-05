@@ -1,5 +1,5 @@
 name: 3615 Home Assistant
-version: "0.3.0"
+version: "0.4.0"
 slug: minitel
 description: Vos tableaux de bord Home Assistant sur un vrai Minitel, par sa ligne téléphonique
 url: https://github.com/enavarro222/3615HomeAssistant

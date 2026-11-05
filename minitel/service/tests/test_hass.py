@@ -271,3 +271,19 @@ def test_unknown_entities_of_the_dashboard_are_reported(caplog):
     with caplog.at_level(logging.INFO, logger="minitel_ha"):
         run(scenario, fake, option="petit")
     assert "entité inconnue de Home Assistant : light.absente" in caplog.text
+
+
+def test_history_reads_the_compact_format():
+    fake = make_fake()
+    fake.history = {"sensor.salon_temp": [(1000.0, "20.5"), (2000.0, "21"), (3000.0, "21.5")]}
+
+    async def scenario(hass, fake):
+        assert await hass.wait_ready(2)
+        history = await hass.history(["sensor.salon_temp"], 2500.0)
+        # L'état en vigueur au début, puis la suite.
+        assert history == {"sensor.salon_temp": [(2000.0, "21"), (3000.0, "21.5")]}
+        request = fake.history_requests[0]
+        assert request["entity_ids"] == ["sensor.salon_temp"]
+        assert request["minimal_response"] and request["no_attributes"]
+
+    run(scenario, fake)

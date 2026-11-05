@@ -12,6 +12,7 @@ import contextlib
 import enum
 import logging
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any, Callable, Iterator, Mapping
 
 import aiohttp
@@ -136,6 +137,26 @@ class Hass:
                 "target": {"entity_id": entity_id},
             }
         )
+
+    async def history(self, entity_ids: list[str], start: float) -> dict[str, list[tuple[float, str]]]:
+        """Les états depuis `start` (secondes Unix), avec celui en vigueur à cet instant."""
+        result = await self._call(
+            {
+                "type": "history/history_during_period",
+                "start_time": datetime.fromtimestamp(start, UTC).isoformat(),
+                "entity_ids": entity_ids,
+                "minimal_response": True,
+                "no_attributes": True,
+                "significant_changes_only": False,
+            }
+        )
+        history: dict[str, list[tuple[float, str]]] = {}
+        for entity_id, rows in (result or {}).items():
+            # Format compact : « lu » (mis à jour), ou seulement « lc » (changé) quand c'est le même.
+            history[entity_id] = [
+                (float(r.get("lu", r.get("lc", start))), str(r.get("s"))) for r in rows if "s" in r
+            ]
+        return history
 
     # --- Connexion ---------------------------------------------------------------------------
 

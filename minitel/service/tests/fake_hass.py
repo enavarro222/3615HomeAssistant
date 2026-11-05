@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 from aiohttp import WSMsgType, web
@@ -19,6 +20,9 @@ class FakeHass:
         self.entities: list[dict[str, Any]] = []
         self.states: dict[str, tuple[str, dict[str, Any]]] = {}
         self.service_calls: list[dict[str, Any]] = []
+        # Pour l'historique : (instant Unix, état), dans l'ordre.
+        self.history: dict[str, list[tuple[float, str]]] = {}
+        self.history_requests: list[dict[str, Any]] = []
         self.commands: list[str] = []
         self.connections = 0
         self._clients: set[web.WebSocketResponse] = set()
@@ -133,6 +137,18 @@ class FakeHass:
                 s for s in self._subscriptions if s[1] != msg["subscription"] or s[0] is not ws
             ]
             await _result(ws, msg_id, None)
+        elif kind == "history/history_during_period":
+            self.history_requests.append(msg)
+            start = datetime.fromisoformat(msg["start_time"]).timestamp()
+            result = {}
+            for entity_id in msg["entity_ids"]:
+                rows = self.history.get(entity_id, [])
+                before = [r for r in rows if r[0] < start][-1:]  # l'état en vigueur au début
+                # Format compact : « lu » omis quand il vaut « lc », comme Home Assistant.
+                result[entity_id] = [
+                    {"s": s, "lc": t} for t, s in before + [r for r in rows if r[0] >= start]
+                ]
+            await _result(ws, msg_id, result)
         elif kind == "call_service":
             self.service_calls.append(msg)
             await _result(ws, msg_id, {"context": {"id": "x"}})

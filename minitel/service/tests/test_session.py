@@ -1,9 +1,11 @@
 """Bout en bout : un faux Home Assistant, le vrai client, un socket TCP et un Minitel simulé."""
 
 import asyncio
+import time
 
 import pytest
 
+from minitel_ha import graph
 from minitel_ha import hass as hass_module
 from minitel_ha import session as session_module
 from minitel_ha import videotex as vt
@@ -498,3 +500,74 @@ def test_title_is_centered():
         assert minitel.row(2).index("3") == 13
 
     call(scenario, title="3615 CHEZ NOUS")
+
+
+# --- Courbes --------------------------------------------------------------------------------------
+
+STEP = 0.2  # un point toutes les 0,2 s, pour que le test ne dure pas
+
+
+def graph_fake(hours):
+    fake = FakeHass()
+    card = {
+        "type": "sensor",
+        "entity": "sensor.debit",
+        "name": "Debit",
+        "graph": "line",
+        "hours_to_show": hours,
+    }
+    fake.add_dashboard("reseau", "Reseau", {"views": [{"title": "Reseau", "cards": [card]}]})
+    fake.system_data = {"default_panel": "reseau"}
+    fake.states = {"sensor.debit": ("100", {"unit_of_measurement": "KiB/s"})}
+    now = time.time()
+    fake.history = {"sensor.debit": [(now - 100000, "50"), (now - 3 * STEP, "80")]}
+    return fake
+
+
+def mosaic_dots(minitel):
+    return sum(
+        bin(minitel.screen.mosaic_code(row, col) or 0x20).count("1") - 1
+        for row in range(TOP + 1, TOP + 5)
+        for col in range(1, 41)
+    )
+
+
+def test_a_short_graph_starts_from_history_moves_and_is_polled(monkeypatch):
+    monkeypatch.setattr(graph, "MIN_PERIOD", STEP)
+    fake = graph_fake(STEP * graph.POINTS / 3600 / 2)  # plus court que le minimum : un point par STEP
+
+    async def scenario(minitel, fake):
+        assert minitel.row(TOP) == line("   Debit (0 a 100)", "100 KiB/s")
+        assert fake.history_requests[0]["entity_ids"] == ["sensor.debit"]
+        assert mosaic_dots(minitel) > 0  # 80, puis 100 : la courbe part de l'historique
+
+        await asyncio.sleep(3 * STEP)
+        await minitel.settle()
+        polls = [c for c in fake.service_calls if c["service"] == "update_entity"]
+        assert polls and polls[0]["domain"] == "homeassistant"
+        assert polls[0]["target"] == {"entity_id": "sensor.debit"}
+
+        # Le balayage ne renvoie que quelques cases à chaque point.
+        before = len(minitel.received)
+        await asyncio.sleep(4 * STEP)
+        await minitel.settle()
+        assert 0 < len(minitel.received) - before < 4 * 40
+
+        await fake.set_state("sensor.debit", "400")
+        await minitel.settle()
+        assert minitel.row(TOP) == line("   Debit (0 a 400)", "400 KiB/s")
+
+    call(scenario, fake)
+
+
+def test_a_long_graph_is_not_polled(monkeypatch):
+    monkeypatch.setattr(graph, "MIN_PERIOD", STEP)
+    fake = graph_fake(24)
+
+    async def scenario(minitel, fake):
+        assert minitel.row(TOP) == line("   Debit (0 a 100)", "100 KiB/s")
+        assert mosaic_dots(minitel) > 0
+        await asyncio.sleep(3 * STEP)
+        assert not [c for c in fake.service_calls if c["service"] == "update_entity"]
+
+    call(scenario, fake)

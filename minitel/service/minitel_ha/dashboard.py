@@ -111,7 +111,7 @@ class Item:
     name: str | None = None
     style: Style = "row"
     visible_if: Condition | None = None
-    hours: int = 24  # style "graph"
+    hours: float = 24  # style "graph" : la durée couverte par la courbe
     bounds: tuple[float, float] = (0, 100)  # style "bar"
 
 
@@ -324,7 +324,7 @@ def _card(card: Mapping[str, Any], parent: Condition | None, report: _Report) ->
         return title + ([Glance(items, condition)] if items else [])
     if kind == "sensor" and card.get("entity"):
         style: Style = "graph" if card.get("graph") in ("line", "bar") else "big"
-        hours = int(card.get("hours_to_show", 24))
+        hours = _hours(card.get("hours_to_show"), 24)
         return [Item(card["entity"], card.get("name"), style, condition, hours=hours)]
     if kind == "gauge" and card.get("entity"):
         bounds = (float(card.get("min", 0)), float(card.get("max", 100)))
@@ -368,7 +368,7 @@ def _entities_card(card: Mapping[str, Any], condition: Condition | None, report:
 
 
 def _graph_card(card: Mapping[str, Any], condition: Condition | None, report: _Report) -> list[Element]:
-    hours = int(card.get("hours_to_show") or 24 * card.get("days_to_show", 1))
+    hours = _hours(card.get("hours_to_show"), 24 * _hours(card.get("days_to_show"), 1))
     items = [i for i in (_row(r, report, card["type"]) for r in card.get("entities", []) or []) if i]
     if card.get("entity"):
         items.insert(0, Item(card["entity"], _name(card)))
@@ -377,6 +377,15 @@ def _graph_card(card: Mapping[str, Any], condition: Condition | None, report: _R
         Item(item.entity_id, item.name, "graph" if index == 0 else "row", condition, hours=hours)
         for index, item in enumerate(items)
     ]
+
+
+def _hours(value: Any, default: float) -> float:
+    """Une durée de carte. Les fractions passent : 0.02 h, c'est 72 secondes."""
+    try:
+        hours = float(value)
+    except (TypeError, ValueError):
+        return default
+    return hours if hours > 0 else default
 
 
 def _row(row: Any, report: _Report, kind: str) -> Item | None:

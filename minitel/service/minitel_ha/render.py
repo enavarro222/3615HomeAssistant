@@ -2,15 +2,18 @@
 
 Une vue s'étale sur un ou plusieurs écrans de 16 rangées. Chaque écran numérote ses entités
 qu'on peut commander, de 1 à n. Le contenu de chaque rangée est rendu en octets Vidéotex :
-la session compare avec ce qui est déjà à l'écran, et n'envoie que ce qui change.
+la session compare avec ce qui est déjà à l'écran, et n'envoie que ce qui change. Les rangées
+qui bougent sans cesse (une courbe, sa valeur) sont découpées en zones, pour n'en renvoyer
+qu'un morceau.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Mapping, Protocol
+from typing import Any, Mapping, Protocol, Sequence
 
+from . import graph
 from . import videotex as vt
 from .dashboard import Element, Glance, Heading, Item, View, is_visible, without_empty_headings
 
@@ -18,6 +21,7 @@ CONTENT_TOP = 5
 CONTENT_ROWS = 16
 GLANCE_COLUMNS = 2
 BAR_WIDTH = 10
+VALUE_WIDTH = 16
 
 
 class State(Protocol):
@@ -40,7 +44,11 @@ class Line:
 
     @property
     def height(self) -> int:
-        return 2 if isinstance(self.element, Item) and self.element.style == "big" else 1
+        if isinstance(self.element, Item) and self.element.style == "big":
+            return 2
+        if isinstance(self.element, Item) and self.element.style == "graph":
+            return 1 + graph.ROWS
+        return 1
 
 
 @dataclass(frozen=True)
@@ -98,7 +106,38 @@ def _numbered(lines: list[Line]) -> Screen:
 # --- Rendu des rangées ---------------------------------------------------------------------------
 
 
-def render(screen: Screen, states: Mapping[str, State]) -> dict[int, bytes]:
+class Zoned(bytes):
+    """Une rangée faite de zones de largeur fixe, chacune remplie jusqu'au bout.
+
+    Si l'écran montre une rangée découpée de la même façon, il suffit de renvoyer les zones qui
+    ont changé : leur largeur fixe efface ce qui restait de l'ancien contenu.
+    """
+
+    zones: tuple[tuple[int, bytes], ...]
+
+    def __new__(cls, row: int, zones: Sequence[tuple[int, bytes]]) -> Zoned:
+        data = b"".join((b"" if col == 1 else vt.pos(row, col)) + content for col, content in zones)
+        self = super().__new__(cls, data)
+        self.zones = tuple(zones)
+        return self
+
+
+class Mosaic(bytes):
+    """Une rangée de mosaïques, un caractère par colonne : on ne renvoie que ceux qui changent."""
+
+    cells: bytes
+
+    def __new__(cls, cells: bytes) -> Mosaic:
+        self = super().__new__(cls, bytes((vt.SO,)) + cells + bytes((vt.SI,)))
+        self.cells = cells
+        return self
+
+
+Graphs = Mapping[Item, Sequence[float | None]]
+"""Les points de chaque courbe à l'écran, tels que `graph.points` les donne."""
+
+
+def render(screen: Screen, states: Mapping[str, State], graphs: Graphs | None = None) -> dict[int, bytes]:
     """Le contenu de chaque rangée occupée, sans le positionnement en début de rangée."""
     rows: dict[int, bytes] = {}
     row = CONTENT_TOP
@@ -113,6 +152,9 @@ def render(screen: Screen, states: Mapping[str, State]) -> dict[int, bytes]:
             rows[row + 1] = _big(row + 1, element, states)
         elif element.style == "bar":
             rows[row] = _bar(row, line, states)
+        elif element.style == "graph":
+            points = list((graphs or {}).get(element, [None] * graph.POINTS))
+            rows.update(_graph(row, line, states, points))
         else:
             rows[row] = _item(row, line, states)
         row += line.height
@@ -183,6 +225,27 @@ def _bar(row: int, line: Line, states: Mapping[str, State]) -> bytes:
         + vt.pos(row, value_col)
         + vt.text(value)
     )
+
+
+def _graph(row: int, line: Line, states: Mapping[str, State], points: list[float | None]) -> dict[int, bytes]:
+    """Le nom, l'échelle et la valeur, puis la courbe en dessous."""
+    item = line.element
+    assert isinstance(item, Item)
+    state = states.get(item.entity_id)
+    low, high = graph.scale(points)
+    value, active = describe(item.entity_id, state)
+    value = _fit(value, VALUE_WIDTH).rjust(VALUE_WIDTH)
+    left = vt.WIDTH - VALUE_WIDTH
+    prefix = f"{line.number:>2} " if line.number else "   "
+    bounds = f" ({_format_number(low, f'{low:g}')} a {_format_number(high, f'{high:g}')})"
+    name = _fit(name_of(item, state), left - len(prefix) - len(bounds) - 1)
+    label = _fit(prefix + name + bounds, left).ljust(left)
+    rows: dict[int, bytes] = {
+        row: Zoned(row, ((1, vt.text(label)), (left + 1, vt.inverse(value) if active else vt.text(value))))
+    }
+    for index, cells in enumerate(graph.mosaic(points, low, high), 1):
+        rows[row + index] = Mosaic(cells)
+    return rows
 
 
 def _fit(value: str, width: int) -> str:

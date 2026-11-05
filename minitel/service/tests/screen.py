@@ -13,6 +13,8 @@ class Screen:
         self.cursor_on = False
         self.inverse = False
         self.inverse_cells: set[tuple[int, int]] = set()
+        self.mosaic = False
+        self.mosaic_cells: set[tuple[int, int]] = set()
 
     def row_text(self, row: int) -> str:
         return "".join(self.cells[row][1:]).rstrip()
@@ -20,12 +22,20 @@ class Screen:
     def is_inverse(self, row: int, col: int) -> bool:
         return (row, col) in self.inverse_cells
 
+    def mosaic_code(self, row: int, col: int) -> int | None:
+        """Le code G1 de la case, si c'est une mosaïque."""
+        return ord(self.cells[row][col]) if (row, col) in self.mosaic_cells else None
+
     def _put(self, char: str) -> None:
         self.cells[self.row][self.col] = char
         if self.inverse:
             self.inverse_cells.add((self.row, self.col))
         else:
             self.inverse_cells.discard((self.row, self.col))
+        if self.mosaic:
+            self.mosaic_cells.add((self.row, self.col))
+        else:
+            self.mosaic_cells.discard((self.row, self.col))
         self.last = char
         self.col += 1
         if self.col > vt.WIDTH:
@@ -38,13 +48,20 @@ class Screen:
             if byte == vt.US:
                 self.row = next(stream) - 0x40
                 self.col = next(stream) - 0x40
+                self.mosaic = False  # le positionnement revient au jeu de caractères normal
+            elif byte == vt.SO:
+                self.mosaic = True
+            elif byte == vt.SI:
+                self.mosaic = False
             elif byte == vt.FF:
                 self.cells = [[" "] * (vt.WIDTH + 1) for _ in range(vt.HEIGHT + 1)]
                 self.inverse_cells.clear()
+                self.mosaic_cells.clear()
                 self.row = self.col = 1
             elif byte == vt.CAN:
                 for col in range(self.col, vt.WIDTH + 1):
                     self.cells[self.row][col] = " "
+                    self.mosaic_cells.discard((self.row, col))
             elif byte == vt.BS:
                 self.col -= 1
             elif byte == vt.CON:

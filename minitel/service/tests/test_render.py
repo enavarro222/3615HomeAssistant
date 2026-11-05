@@ -216,3 +216,32 @@ def test_long_names_never_overflow_on_the_value():
     [screen] = screens(View("V", (Item("cover.a"),)), states)
     _, out = draw(screen, states)
     assert out.row_text(5) == " 1 " + "n" * 26 + " OUVERT 55%"
+
+
+def test_a_graph_is_a_label_then_four_mosaic_rows():
+    item = Item("sensor.debit", "Debit", "graph", hours=1)
+    screen = screens(View("Reseau", (item,)), {})[0]
+    assert screen.lines[0].height == 5
+    states = {"sensor.debit": S("1117.6", unit_of_measurement="KiB/s")}
+    points = [1117.6, 1117.6, 3.0] + [None] * 77
+    rows = render.render(screen, states, {item: points})
+    assert sorted(rows) == [5, 6, 7, 8, 9]
+    label = rows[5]
+    assert isinstance(label, render.Zoned)
+    assert [col for col, _ in label.zones] == [1, 25]
+    assert all(isinstance(rows[row], render.Mosaic) for row in range(6, 10))
+    screen_ = Screen()
+    for row, content in rows.items():
+        screen_.feed(vt.pos(row) + content)
+    assert screen_.row_text(5) == "   Debit (0 a 1500)".ljust(28) + "1117,6 KiB/s"
+    assert screen_.mosaic_code(9, 1) == 0x7F  # 1117,6 sur 1500 : le bas plein…
+    assert screen_.mosaic_code(9, 2) == 0x30  # 3 : un seul gros point, en bas à gauche…
+    assert screen_.mosaic_code(9, 3) == 0x20  # … et rien après
+    assert screen_.mosaic_code(6, 1) == 0x20  # 9 niveaux sur 12 : la rangée du haut vide
+    assert screen_.mosaic_code(5, 1) is None  # le libellé n'est pas en mosaïque
+
+
+def test_a_graph_without_points_is_empty():
+    item = Item("sensor.debit", "Debit", "graph")
+    rows = render.render(screens(View("Reseau", (item,)), {})[0], {})
+    assert rows[6] == render.Mosaic(b" " * 40)

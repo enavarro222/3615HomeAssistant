@@ -47,7 +47,8 @@ Les modifications du tableau de bord arrivent sur le Minitel en direct, sans red
 | carte Titre, titre d'une carte Entités ou d'une grille | titre de section, avec ses pastilles à droite (la température de la pièce…) |
 | carte Tuile, Bouton, Entité, Thermostat, lignes d'une carte Entités | une ligne : le nom, l'état à droite |
 | carte Coup d'œil, pastilles de la vue | des valeurs sur deux colonnes |
-| carte Capteur | la valeur en grand |
+| carte Capteur | la valeur en grand ; avec un graphique, une courbe |
+| carte Graphique d'historique ou de statistiques, `mini-graph-card` | une courbe pour la première entité, les autres en lignes |
 | carte Jauge | une jauge en mosaïque |
 | piles, grilles, carte conditionnelle | leur contenu, à plat |
 | visibilité selon un état (une section « porte ouverte ») | la section apparaît et disparaît sur le Minitel |
@@ -55,6 +56,12 @@ Les modifications du tableau de bord arrivent sur le Minitel en direct, sans red
 | `auto-entities`, statistiques, cartes, images, listes, raccourcis | ignorés, et signalés dans le journal |
 
 Le nom vient de la carte (`name`), sinon de l'entité. Le Minitel n'a pas de majuscules accentuées : `É` s'affiche `E`. Les minuscules accentuées passent.
+
+#### Les courbes
+
+Une courbe couvre la durée de sa carte (`hours_to_show`, ou `days_to_show`) en 80 points, sur quatre rangées en mosaïque, sous une ligne qui donne son nom, son échelle et la valeur actuelle. Elle part de l'historique de Home Assistant, puis avance en direct : un curseur balaie l'écran de gauche à droite, comme sur un oscilloscope, et ne réécrit qu'un point à la fois. Il n'y a jamais plus d'un point par seconde, sinon le Minitel ne suivrait pas.
+
+Les fractions d'heure sont acceptées : `hours_to_show: 0.02` donne un point par seconde, sur 80 secondes. Pour une courbe aussi courte (au plus 10 secondes par point, soit `hours_to_show: 0.22` ou moins), le Minitel demande à Home Assistant de relever l'entité à chaque point, tant que la courbe est à l'écran. Une intégration qui n'interroge l'appareil que toutes les 30 secondes suit alors à la seconde, comme le débit d'une box en UPnP. Ne le faites pas sur l'entité d'un service en ligne, qui limite ses requêtes.
 
 ## Le branchement
 
@@ -161,7 +168,6 @@ L'app utilise le réseau de l'hôte : 5060/udp pour le SIP et 10100-10120/udp po
 ## Limites
 
 - Jusqu'à 4 adaptateurs, sur le même compte `minitel` et le même mot de passe. Plusieurs Minitel en ligne en même temps n'ont pas encore été testés.
-- Pas de graphiques : une carte de graphique affiche la valeur actuelle.
 - Pas d'alarme : un `alarm_control_panel` s'affiche, mais ne se commande pas (il faudrait taper son code).
 
 La version Docker sans Home Assistant OS, les tests et les outils de diagnostic sont décrits dans [Développement](https://github.com/enavarro222/3615HomeAssistant/blob/main/DEVELOPPEMENT.md).

@@ -2,6 +2,8 @@
 
 L'écran suit Home Assistant en direct : à chaque changement, on recalcule les rangées et on
 n'envoie que celles qui diffèrent de ce qui est affiché. À 1200 bauds, c'est ce qui compte.
+Les courbes avancent seules, un point à la fois, et leurs entités sont relevées à chaque point
+quand la courbe est courte.
 """
 
 from __future__ import annotations
@@ -9,9 +11,10 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import time
 from dataclasses import dataclass
 
-from . import render
+from . import graph, render
 from . import videotex as vt
 from .config import DEFAULT_TITLE
 from .dashboard import Item
@@ -74,6 +77,8 @@ class Session:
         self._rows: dict[int, bytes] = {}
         self._field = ""
         self._confirm: tuple[Item, Action] | None = None
+        self._series: dict[str, graph.Series] = {}
+        self._polls: dict[str, asyncio.Task[None]] = {}
 
     async def run(self) -> None:
         loop = asyncio.get_running_loop()
@@ -83,10 +88,11 @@ class Session:
             deadline = loop.time() + IDLE_TIMEOUT
             read = asyncio.ensure_future(self._reader.read(64))
             event = asyncio.ensure_future(events.get())
+            tick = asyncio.ensure_future(self._next_point())
             try:
                 while True:
                     done, _ = await asyncio.wait(
-                        {read, event},
+                        {read, event, tick},
                         timeout=max(0.0, deadline - loop.time()),
                         return_when=asyncio.FIRST_COMPLETED,
                     )
@@ -110,8 +116,13 @@ class Session:
                                 await self._goodbye("Au revoir !")
                                 return
                             await self._handle(key)
+                    if tick in done:
+                        await self._advance()
+                    # L'écran a pu changer, et avec lui le prochain point des courbes.
+                    tick.cancel()
+                    tick = asyncio.ensure_future(self._next_point())
             finally:
-                for task in (read, event):
+                for task in (read, event, tick, *self._polls.values()):
                     task.cancel()
                     with contextlib.suppress(asyncio.CancelledError, ConnectionError):
                         await task
@@ -285,7 +296,7 @@ class Session:
         screens = render.screens(view, self._hass.states)
         place.screen = min(place.screen, len(screens) - 1)
         self._screen = screens[place.screen]
-        rows = render.render(self._screen, self._hass.states)
+        rows = render.render(self._screen, self._hass.states, self._graph_points())
         if not self._screen.lines:
             rows[CONTENT_TOP + 6] = vt.text("  Rien a afficher pour l'instant.")
         counter = f"{place.screen + 1}/{len(screens)}" if len(screens) > 1 else ""
@@ -316,6 +327,8 @@ class Session:
         self._field = ""
         self._dashboard = self._hass.dashboard
         rows = self._compose()
+        if await self._load_series():
+            rows = self._compose()
         page = bytearray(vt.clear())
         if not self._hass.connected:
             page += _status()
@@ -336,13 +349,17 @@ class Session:
         if self._hass.dashboard != self._dashboard:  # rechargé, et pas à l'identique
             await self._draw("Tableau de bord mis a jour")
             return
+        self._record(batch)
         update = bytearray()
         if Change.CONNECTION in batch:
             update += _status() if not self._hass.connected else vt.pos(0) + bytes((vt.CAN,))
         if not self._place.guide:
             update += self._diff(self._compose())
+        await self._send_update(bytes(update))
+
+    async def _send_update(self, update: bytes) -> None:
         if update:
-            await self._send(vt.cursor(False) + bytes(update) + self._cursor_back() + vt.cursor(True))
+            await self._send(vt.cursor(False) + update + self._cursor_back() + vt.cursor(True))
 
     def _diff(self, rows: dict[int, bytes]) -> bytes:
         old, self._rows = self._rows, rows
@@ -351,7 +368,94 @@ class Session:
             # Une rangée en double taille déborde sur celle du dessus : on la reprend aussi.
             if render.is_double(rows.get(row, b"")) or render.is_double(old.get(row, b"")):
                 dirty.add(row - 1)
-        return b"".join(vt.pos(row) + bytes((vt.CAN,)) + rows.get(row, b"") for row in sorted(dirty))
+        return b"".join(_row_update(row, old.get(row, b""), rows.get(row, b"")) for row in sorted(dirty))
+
+    # --- Courbes ---------------------------------------------------------------------------------
+
+    def _graph_items(self) -> list[Item]:
+        return [
+            line.element
+            for line in self._screen.lines
+            if isinstance(line.element, Item) and line.element.style == "graph"
+        ]
+
+    def _graph_points(self) -> render.Graphs:
+        now = time.time()
+        return {
+            item: graph.points(self._series.get(item.entity_id), graph.period(item.hours), now)
+            for item in self._graph_items()
+        }
+
+    async def _load_series(self) -> bool:
+        """Les courbes de l'écran partent de l'historique. Vrai s'il a fallu le charger."""
+        items = self._graph_items()
+        self._series = {e: s for e, s in self._series.items() if e in {i.entity_id for i in items}}
+        now = time.time()
+        starts: dict[str, float] = {}
+        for item in items:
+            step = graph.period(item.hours)
+            start = now - step * graph.POINTS
+            series = self._series.get(item.entity_id)
+            if series is None or series.since > start + step:
+                starts[item.entity_id] = min(start, starts.get(item.entity_id, start))
+        if not starts:
+            return False
+        try:
+            history = await self._hass.history(sorted(starts), min(starts.values()))
+        except HAError as err:
+            log.warning("historique de %s : %s", ", ".join(sorted(starts)), err)
+            history = {}
+        for entity_id, start in starts.items():
+            series = graph.Series(start)
+            for moment, state in history.get(entity_id, []):
+                series.add(moment, graph.value(state))
+            current = self._hass.states.get(entity_id)
+            series.add(now, graph.value(current.state) if current else None)
+            self._series[entity_id] = series
+        return True
+
+    def _record(self, batch: list[Event]) -> None:
+        now = time.time()
+        for event in batch:
+            if isinstance(event, frozenset):
+                for entity_id in event & self._series.keys():
+                    state = self._hass.states.get(entity_id)
+                    self._series[entity_id].add(now, graph.value(state.state) if state else None)
+
+    async def _next_point(self) -> None:
+        """Attend le prochain point d'une courbe à l'écran. Sans courbe, attend sans fin."""
+        steps = [graph.period(item.hours) for item in self._graph_items()]
+        if not steps or self._place.guide:
+            await asyncio.Event().wait()
+        now = time.time()
+        await asyncio.sleep(min(step - now % step for step in steps) + 0.01)
+
+    async def _advance(self) -> None:
+        """Le curseur des courbes avance d'un point."""
+        now = time.time()
+        windows: dict[str, float] = {}
+        for item in self._graph_items():
+            step = graph.period(item.hours)
+            windows[item.entity_id] = max(windows.get(item.entity_id, 0), step * (graph.POINTS + 1))
+            if step <= graph.LIVE_PERIOD:
+                self._poll(item.entity_id)
+        for entity_id, window in windows.items():
+            if entity_id in self._series:
+                self._series[entity_id].forget_before(now - window)
+        if not self._place.guide:
+            await self._send_update(self._diff(self._compose()))
+
+    def _poll(self, entity_id: str) -> None:
+        """Demande à Home Assistant de relever l'entité, sans attendre : le nouvel état suivra."""
+        task = self._polls.get(entity_id)
+        if task is None or task.done():
+            self._polls[entity_id] = asyncio.create_task(self._update_entity(entity_id))
+
+    async def _update_entity(self, entity_id: str) -> None:
+        try:
+            await self._hass.call_service("homeassistant", "update_entity", entity_id)
+        except HAError as err:
+            log.debug("relevé de %s : %s", entity_id, err)
 
     async def _show_message(self, message: str, keep_field: bool = False) -> None:
         if not keep_field:
@@ -376,6 +480,39 @@ class Session:
     async def _send(self, data: bytes) -> None:
         self._writer.write(data)
         await self._writer.drain()
+
+
+def _row_update(row: int, old: bytes, new: bytes) -> bytes:
+    """Ce qu'il faut envoyer pour passer de l'ancienne rangée à la nouvelle."""
+    if isinstance(old, render.Mosaic) and isinstance(new, render.Mosaic):
+        return _mosaic_update(row, old.cells, new.cells)
+    if (
+        isinstance(old, render.Zoned)
+        and isinstance(new, render.Zoned)
+        and [col for col, _ in old.zones] == [col for col, _ in new.zones]
+    ):
+        return b"".join(
+            vt.pos(row, col) + content
+            for (col, content), (_, before) in zip(new.zones, old.zones)
+            if content != before
+        )
+    return vt.pos(row) + bytes((vt.CAN,)) + new
+
+
+def _mosaic_update(row: int, old: bytes, new: bytes) -> bytes:
+    """Les caractères qui changent, par paquets : un écart de moins de 4 coûte moins qu'un saut."""
+    out = bytearray()
+    changed = [i for i in range(len(new)) if i >= len(old) or old[i] != new[i]]
+    start = end = None
+    for index in changed + [None]:
+        if index is not None and end is not None and index - end < 4:
+            end = index + 1
+            continue
+        if start is not None and end is not None:
+            out += vt.pos(row, start + 1) + bytes((vt.SO,)) + new[start:end]
+        if index is not None:
+            start, end = index, index + 1
+    return bytes(out + bytes((vt.SI,))) if out else b""
 
 
 def _subtitle(title: str, counter: str) -> bytes:
