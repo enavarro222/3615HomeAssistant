@@ -18,14 +18,8 @@ options:
   title: 3615 MAISON
   dashboard: ""
   lan_cidr: ""
-  pages: []
 schema:
   title: str
   dashboard: str?
   sip_password: password
   lan_cidr: str?
-  pages:
-    - title: str
-      lights:
-        - name: str
-          entity: str

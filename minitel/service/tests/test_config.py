@@ -1,9 +1,6 @@
 from pathlib import Path
 
-import pytest
-
 from minitel_ha.config import DEFAULT_TITLE, Options, load_config, load_options
-from minitel_ha.dashboard import Dashboard, Item, View
 
 EXAMPLE = Path(__file__).parents[3] / "minitel.example.yaml"
 
@@ -15,44 +12,27 @@ def write(tmp_path, content):
 
 
 def test_empty_file_follows_home_assistant(tmp_path):
-    assert load_options(write(tmp_path, "")) == Options(DEFAULT_TITLE, "", None)
+    assert load_options(write(tmp_path, "")) == Options(DEFAULT_TITLE, "")
 
 
 def test_dashboard_and_title(tmp_path):
     options = load_options(write(tmp_path, "title: 3615 CHEZ NOUS\ndashboard: ' maison-minitel '\n"))
-    assert options == Options("3615 CHEZ NOUS", "maison-minitel", None)
+    assert options == Options("3615 CHEZ NOUS", "maison-minitel")
 
 
 def test_app_options_as_written_by_run_sh(tmp_path):
     # jq écrit null pour une option absente.
-    content = '{"title": "3615 MAISON", "dashboard": null, "pages": []}'
-    assert load_options(write(tmp_path, content)) == Options(DEFAULT_TITLE, "", None)
+    content = '{"title": "3615 MAISON", "dashboard": null}'
+    assert load_options(write(tmp_path, content)) == Options(DEFAULT_TITLE, "")
 
 
-def test_handwritten_pages_become_a_fixed_dashboard(tmp_path):
-    content = "pages:\n  - title: Étage\n    lights:\n      - {name: Palier, entity: light.palier}\n"
-    options = load_options(write(tmp_path, content))
-    assert options.pages == Dashboard("Sommaire", (View("Étage", (Item("light.palier", "Palier"),)),))
-
-
-def test_pages_are_no_longer_limited_to_16(tmp_path):
-    lights = "".join(f"      - {{name: n, entity: light.l{i}}}\n" for i in range(20))
-    options = load_options(write(tmp_path, f"pages:\n  - title: T\n    lights:\n{lights}"))
-    assert len(options.pages.views[0].elements) == 20
-
-
-def test_a_dashboard_wins_over_pages(tmp_path):
-    content = "dashboard: maison\npages:\n  - title: T\n    lights:\n      - {name: n, entity: light.n}\n"
-    assert load_options(write(tmp_path, content)) == Options(DEFAULT_TITLE, "maison", None)
-
-
-def test_rejects_an_empty_page(tmp_path):
-    with pytest.raises(ValueError, match="aucune entité"):
-        load_options(write(tmp_path, "pages:\n  - title: T\n    lights: []\n"))
+def test_old_handwritten_pages_are_ignored(tmp_path):
+    content = "pages:\n  - title: T\n    lights:\n      - {name: n, entity: light.n}\n"
+    assert load_options(write(tmp_path, content)) == Options(DEFAULT_TITLE, "")
 
 
 def test_shipped_example_is_valid():
-    assert load_options(EXAMPLE) == Options(DEFAULT_TITLE, "", None)
+    assert load_options(EXAMPLE) == Options(DEFAULT_TITLE, "")
 
 
 def test_env(tmp_path, monkeypatch):

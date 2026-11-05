@@ -42,7 +42,6 @@ title: 3615 MAISON
 dashboard: maison-minitel        # vide : le tableau de bord par défaut
 sip_password: ChoisissezUnMotDePasse42   # lettres et chiffres, à reporter dans l'adaptateur
 lan_cidr: ""                             # vide : le réseau local est détecté
-pages: []
 ```
 
 Démarrez l'app : le panneau **Minitel** apparaît dans la barre latérale. Appuyez sur **Connexion/Fin** : si le sommaire s'affiche, l'app marche. Ce que deviennent les cartes est détaillé dans [la documentation de l'app](minitel/DOCS.md#le-tableau-de-bord).

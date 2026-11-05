@@ -21,7 +21,7 @@ async def main() -> None:
     config = load_config()
     options = config.options
     web_config = load_web_config()
-    hass = Hass(config.ha_url, config.ha_token, options.dashboard, options.pages)
+    hass = Hass(config.ha_url, config.ha_token, options.dashboard)
     web_runner = None
 
     async def handle(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:

@@ -23,8 +23,8 @@ echo "Réseau autorisé à joindre Asterisk : $LAN_CIDR"
 # tiré à chaque démarrage : il ne sort jamais du conteneur.
 WEB_SIP_PASSWORD=$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')
 
-# Seuls le titre, le tableau de bord et les pages vont au service : il ne tourne pas en root.
-jq '{title, dashboard, pages}' "$OPTIONS" > "$SERVICE_OPTIONS"
+# Seuls le titre et le tableau de bord vont au service : il ne tourne pas en root.
+jq '{title, dashboard}' "$OPTIONS" > "$SERVICE_OPTIONS"
 chmod 644 "$SERVICE_OPTIONS"
 
 # En réseau hôte : sur 127.0.0.1, car le service n'a aucune authentification.

@@ -7,7 +7,7 @@
 - **Numéro + SUITE / RETOUR** : plus ou moins de lumière, de chauffage, d'ouverture de volet.
 - Les sections et cartes à visibilité conditionnelle (une porte ouverte…) apparaissent et disparaissent sur le Minitel.
 - **GUIDE** affiche l'aide des touches. La rangée du haut signale quand Home Assistant ne répond plus.
-- Les `pages` de lumières écrites à la main marchent toujours, sans limite de 16 par page.
+- L'option `pages` (des lumières écrites à la main) disparaît : le tableau de bord la remplace. Une ancienne valeur est ignorée.
 
 ## 0.2.0
 

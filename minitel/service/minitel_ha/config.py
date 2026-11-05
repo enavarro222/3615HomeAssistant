@@ -8,10 +8,7 @@ from pathlib import Path
 
 import yaml
 
-from .dashboard import Dashboard, Item, View
-
 DEFAULT_TITLE = "3615 MAISON"
-PAGES_TITLE = "Sommaire"
 
 
 @dataclass(frozen=True)
@@ -19,8 +16,6 @@ class Options:
     title: str = DEFAULT_TITLE
     dashboard: str = ""
     """Le tableau de bord de Home Assistant à afficher. Vide : celui par défaut."""
-    pages: Dashboard | None = None
-    """Des pages écrites à la main (l'ancien format) : elles passent avant tout tableau de bord."""
 
 
 @dataclass(frozen=True)
@@ -36,16 +31,7 @@ def load_options(path: Path) -> Options:
     raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     title = raw.get("title") or DEFAULT_TITLE
     dashboard = (raw.get("dashboard") or "").strip()
-    pages = raw.get("pages") or []
-    if dashboard or not pages:
-        return Options(title, dashboard)
-    views = []
-    for page in pages:
-        lights = page.get("lights") or []
-        if not lights:
-            raise ValueError(f"{path} : la page « {page.get('title')} » n'a aucune entité")
-        views.append(View(page["title"], tuple(Item(light["entity"], light["name"]) for light in lights)))
-    return Options(title, "", Dashboard(PAGES_TITLE, tuple(views)))
+    return Options(title, dashboard)
 
 
 def load_config() -> Config:

@@ -66,13 +66,11 @@ def websocket_url(ha_url: str) -> str:
 
 
 class Hass:
-    def __init__(self, url: str, token: str, dashboard: str = "", fixed: Dashboard | None = None) -> None:
-        """`dashboard` : le réglage de l'app. `fixed` : des pages écrites dans la configuration,
-        qui passent avant tout tableau de bord."""
+    def __init__(self, url: str, token: str, dashboard: str = "") -> None:
+        """`dashboard` : le réglage de l'app."""
         self._url = websocket_url(url)
         self._token = token
         self._option = dashboard
-        self._fixed = fixed
         self._http: aiohttp.ClientSession | None = None
         self._task: asyncio.Task[None] | None = None
         self._ws: aiohttp.ClientWebSocketResponse | None = None
@@ -264,12 +262,6 @@ class Hass:
         self._ready.set()
 
     async def _load(self) -> None:
-        if self._fixed is not None:
-            if not self.dashboard.views:
-                log.info("pages de la configuration de l'app : %d rubriques", len(self._fixed.views))
-            self.dashboard = self._fixed
-            await self._watch(self._fixed.entity_ids())
-            return
         dashboards = await self._call({"type": "lovelace/dashboards/list"})
         titles = {d["url_path"]: d.get("title") or d["url_path"] for d in dashboards}
         try:

@@ -21,7 +21,6 @@ title: 3615 MAISON
 dashboard: ""
 sip_password: ChoisissezUnMotDePasse42
 lan_cidr: ""
-pages: []
 ```
 
 | Option | Rôle |
@@ -30,7 +29,6 @@ pages: []
 | `dashboard` | Le tableau de bord de Home Assistant à afficher. Vide : celui par défaut. Voir ci-dessous. |
 | `sip_password` | Lettres et chiffres uniquement. À reporter dans l'adaptateur. |
 | `lan_cidr` | Réseau autorisé à s'enregistrer sur Asterisk, par exemple `192.168.1.0/24`. Vide : le réseau de l'interface par défaut. |
-| `pages` | L'ancienne façon : des pages de lumières écrites à la main. Voir [Pages écrites à la main](#pages-écrites-à-la-main). |
 
 Au démarrage, l'onglet Journal de l'app affiche le réseau autorisé, le tableau de bord choisi, ce qui n'a pas pu en être repris, puis `en écoute sur 127.0.0.1:3615`.
 
@@ -57,20 +55,6 @@ Les modifications du tableau de bord arrivent sur le Minitel en direct, sans red
 | `auto-entities`, statistiques, cartes, images, listes, raccourcis | ignorés, et signalés dans le journal |
 
 Le nom vient de la carte (`name`), sinon de l'entité. Le Minitel n'a pas de majuscules accentuées : `É` s'affiche `E`. Les minuscules accentuées passent.
-
-### Pages écrites à la main
-
-L'ancienne configuration marche toujours : si `pages` est rempli et `dashboard` vide, le Minitel affiche ces pages plutôt qu'un tableau de bord.
-
-```yaml
-pages:
-  - title: Salon
-    lights:
-      - { name: Plafonnier, entity: light.salon }
-      - { name: Lampe, entity: switch.lampe_salon }
-```
-
-Toutes les entités qu'on peut commander y passent, pas seulement `light` et `switch`.
 
 ## Le branchement
 

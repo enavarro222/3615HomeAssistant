@@ -249,33 +249,25 @@ def test_a_refused_token_never_gets_ready(caplog):
     assert "jeton refusé" in caplog.text
 
 
-def test_fixed_pages_skip_dashboards_and_report_unknown_entities(caplog):
-    from minitel_ha.dashboard import Dashboard, View
-
-    fixed = Dashboard(
-        "Sommaire", (View("Salon", (Item("light.salon", "Salon"), Item("light.absente", "A"))),)
-    )
+def test_unknown_entities_of_the_dashboard_are_reported(caplog):
     fake = make_fake()
+    config = {
+        "views": [
+            {
+                "title": "Salon",
+                "cards": [
+                    {"type": "tile", "entity": "light.salon"},
+                    {"type": "tile", "entity": "light.absente"},
+                ],
+            }
+        ]
+    }
+    fake.add_dashboard("petit", "Petit", config)
 
     async def scenario(hass, fake):
         assert await hass.wait_ready(2)
-        assert hass.dashboard is fixed
         assert hass.state_values() == {"light.salon": "off"}
-        assert "lovelace/dashboards/list" not in fake.commands
-        await fake.fire("entity_registry_updated", {})  # pas de rechargement pour des pages fixes
-        await asyncio.sleep(0.05)
-        assert fake.commands.count("subscribe_entities") == 1
-
-    async def main():
-        url = await fake.start()
-        hass = Hass(url, "secret", "", fixed)
-        await hass.start()
-        try:
-            await scenario(hass, fake)
-        finally:
-            await hass.close()
-            await fake.stop()
 
     with caplog.at_level(logging.INFO, logger="minitel_ha"):
-        asyncio.run(asyncio.wait_for(main(), 10))
+        run(scenario, fake, option="petit")
     assert "entité inconnue de Home Assistant : light.absente" in caplog.text

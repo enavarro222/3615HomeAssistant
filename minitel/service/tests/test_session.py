@@ -8,7 +8,6 @@ from minitel_ha import hass as hass_module
 from minitel_ha import session as session_module
 from minitel_ha import videotex as vt
 from minitel_ha.config import DEFAULT_TITLE
-from minitel_ha.dashboard import Dashboard, Item, View
 from minitel_ha.hass import Hass
 from minitel_ha.session import FIELD_COL, HELP_ROW, MESSAGE_ROW, PROMPT_ROW, SUBTITLE_ROW, Session
 
@@ -121,12 +120,12 @@ class Minitel:
         raise AssertionError(f"{text!r} absent de l'écran")
 
 
-def call(scenario, fake=None, option="", fixed=None, title=DEFAULT_TITLE):
+def call(scenario, fake=None, option="", title=DEFAULT_TITLE):
     fake = fake or make_fake()
 
     async def run():
         url = await fake.start()
-        hass = Hass(url, "secret", option, fixed)
+        hass = Hass(url, "secret", option)
         await hass.start()
         assert await hass.wait_ready(2)
 
@@ -176,13 +175,19 @@ def test_home_is_the_summary():
 
 
 def test_a_single_view_opens_directly():
-    fixed = Dashboard("Sommaire", (View("Lumieres", (Item("light.salon", "Salon"),)),))
+    fake = make_fake()
+    lumieres = {
+        "views": [
+            {"title": "Lumieres", "cards": [{"type": "tile", "entity": "light.salon", "name": "Salon"}]}
+        ]
+    }
+    fake.add_dashboard("lumieres", "Lumieres", lumieres)
 
     async def scenario(minitel, fake):
         assert minitel.row(SUBTITLE_ROW) == "Lumieres"
         assert minitel.row(TOP) == line(" 1 Salon", "ETEINT")
 
-    call(scenario, fixed=fixed)
+    call(scenario, fake, option="lumieres")
 
 
 def test_view_lists_entities_and_numbers_what_can_be_commanded():
