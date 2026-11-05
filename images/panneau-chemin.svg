@@ -1,0 +1,95 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 990 300" width="990" height="300" role="img" aria-labelledby="titre desc">
+  <title id="titre">Le chemin d'un appel, du vrai Minitel et du panneau de test</title>
+  <desc id="desc">En haut, le vrai Minitel passe par la prise T et l'adaptateur SIP jusqu'à Asterisk. En bas, le navigateur envoie les touches par WebSocket au panneau web de l'app, dont le modem V.23 logiciel appelle Asterisk en SIP sur la machine même. À partir d'Asterisk et du softmodem, les deux chemins sont identiques : service Vidéotex, puis Home Assistant.</desc>
+  <style>
+    .box { fill: #f6f3ee; stroke: #8c8378; stroke-width: 1.5; }
+    .web { fill: #fbe9e2; stroke: #c97a5d; stroke-width: 1.5; }
+    .app { fill: none; stroke: #8c8378; stroke-width: 1.2; stroke-dasharray: 6 5; }
+    .wire { fill: none; stroke: #6b645b; stroke-width: 1.8; }
+    .wire-web { fill: none; stroke: #c97a5d; stroke-width: 1.8; }
+    .head { fill: #6b645b; }
+    .head-web { fill: #c97a5d; }
+    text { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; fill: #2b2723; }
+    .t { font-size: 15px; font-weight: 650; }
+    .s { font-size: 12px; fill: #6b645b; }
+    .l { font-size: 12px; fill: #6b645b; }
+    .lw { font-size: 12px; fill: #a65a3e; }
+    .cap { font-size: 13px; font-weight: 600; fill: #6b645b; }
+    @media (prefers-color-scheme: dark) {
+      .box { fill: #2a2622; stroke: #8c8378; }
+      .web { fill: #3a2620; stroke: #d98c6f; }
+      .app { stroke: #8c8378; }
+      .wire { stroke: #a39b8f; }
+      .wire-web { stroke: #d98c6f; }
+      .head { fill: #a39b8f; }
+      .head-web { fill: #d98c6f; }
+      text { fill: #e9e4da; }
+      .s, .l, .cap { fill: #a39b8f; }
+      .lw { fill: #e3a184; }
+    }
+  </style>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path class="head" d="M0 0L10 5L0 10z"/>
+    </marker>
+    <marker id="aw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path class="head-web" d="M0 0L10 5L0 10z"/>
+    </marker>
+  </defs>
+
+  <text class="cap" x="20" y="26">Avec le vrai Minitel</text>
+  <text class="cap" x="20" y="288">Avec le panneau de test : le même chemin à partir d'Asterisk</text>
+
+  <!-- L'app : tout ce qui tourne dans le conteneur -->
+  <rect class="app" x="243" y="104" width="553" height="166" rx="12"/>
+  <text class="s" x="255" y="124">App 3615 Home Assistant</text>
+
+  <!-- Le vrai Minitel -->
+  <rect class="box" x="20" y="40" width="140" height="56" rx="8"/>
+  <text class="t" x="90" y="64" text-anchor="middle">Minitel</text>
+  <text class="s" x="90" y="82" text-anchor="middle">modem V.23</text>
+
+  <rect class="box" x="250" y="40" width="140" height="56" rx="8"/>
+  <text class="t" x="320" y="64" text-anchor="middle">Adaptateur SIP</text>
+  <text class="s" x="320" y="82" text-anchor="middle">SPA112…</text>
+
+  <path class="wire" d="M160 68H246" marker-end="url(#a)"/>
+  <text class="l" x="205" y="60" text-anchor="middle">prise T</text>
+
+  <path class="wire" d="M390 68H420V140H446" marker-end="url(#a)"/>
+  <text class="l" x="430" y="64">SIP + audio G.711a, réseau local</text>
+
+  <!-- Le panneau -->
+  <rect class="web" x="20" y="200" width="140" height="56" rx="8"/>
+  <text class="t" x="90" y="224" text-anchor="middle">Navigateur</text>
+  <text class="s" x="90" y="242" text-anchor="middle">écran + clavier</text>
+
+  <rect class="web" x="250" y="200" width="140" height="56" rx="8"/>
+  <text class="t" x="320" y="224" text-anchor="middle">Panneau web</text>
+  <text class="s" x="320" y="242" text-anchor="middle">modem V.23 logiciel</text>
+
+  <path class="wire-web" d="M160 228H246" marker-end="url(#aw)" marker-start="url(#aw)"/>
+  <text class="lw" x="202" y="214" text-anchor="middle">WebSocket</text>
+  <text class="lw" x="202" y="250" text-anchor="middle">par l'ingress</text>
+
+  <path class="wire-web" d="M390 228H420V156H446" marker-end="url(#aw)"/>
+  <text class="lw" x="430" y="232">SIP + audio G.711a, sur la machine</text>
+
+  <!-- Le chemin commun -->
+  <rect class="box" x="450" y="120" width="140" height="56" rx="8"/>
+  <text class="t" x="520" y="144" text-anchor="middle">Asterisk</text>
+  <text class="s" x="520" y="162" text-anchor="middle">softmodem V.23</text>
+
+  <rect class="box" x="640" y="120" width="140" height="56" rx="8"/>
+  <text class="t" x="710" y="144" text-anchor="middle">Service</text>
+  <text class="s" x="710" y="162" text-anchor="middle">pages Vidéotex</text>
+
+  <rect class="box" x="830" y="120" width="140" height="56" rx="8"/>
+  <text class="t" x="900" y="144" text-anchor="middle">Home Assistant</text>
+  <text class="s" x="900" y="162" text-anchor="middle">les lumières</text>
+
+  <path class="wire" d="M590 148H636" marker-end="url(#a)"/>
+  <text class="l" x="613" y="140" text-anchor="middle">TCP</text>
+  <path class="wire" d="M780 148H826" marker-end="url(#a)"/>
+  <text class="l" x="803" y="140" text-anchor="middle">API</text>
+</svg>

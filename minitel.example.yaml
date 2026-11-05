@@ -1,0 +1,16 @@
+# Installation Docker seulement : l'app prend ces réglages dans sa configuration.
+# À copier en minitel.yaml.
+title: 3615 MAISON
+
+# Le tableau de bord de Home Assistant à afficher, tel qu'il apparaît dans l'adresse
+# du navigateur : http://ha:8123/maison-minitel/salon donne maison-minitel.
+# Vide : le tableau de bord par défaut de Home Assistant.
+dashboard: ""
+
+# Ou, sans tableau de bord, des pages écrites ici : enlever le « # » des lignes.
+# Elles ne servent que si « dashboard » est vide.
+# pages:
+#   - title: Rez-de-chaussee
+#     lights:
+#       - { name: Salon, entity: light.salon }
+#       - { name: Cuisine, entity: light.cuisine }

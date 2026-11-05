@@ -1,0 +1,15 @@
+# Secrets et configuration locale
+.env
+minitel.yaml
+lights.yaml
+
+# Python
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+uv.lock
+
+# Captures d'appels
+*.pcap

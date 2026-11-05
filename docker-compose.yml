@@ -1,0 +1,41 @@
+services:
+  # Serveur Vidéotex : reçoit une connexion TCP par appel. Écoute seulement sur
+  # 127.0.0.1 de l'hôte car il n'a aucune authentification : n'importe qui le
+  # joignant pourrait piloter les lumières. Pour un test à l'émulateur depuis le
+  # LAN, mettre temporairement VIDEOTEX_BIND=0.0.0.0 dans .env.
+  minitel-service:
+    build:
+      context: ./minitel
+      target: service
+    container_name: minitel-service
+    restart: unless-stopped
+    environment:
+      - TZ=${TZ:-Europe/Paris}
+      - HA_URL=${HA_URL:?HA_URL manquant, voir .env.example}
+      - HA_TOKEN=${HA_TOKEN:?HA_TOKEN manquant, voir .env.example}
+      - OPTIONS_FILE=/app/minitel.yaml
+    volumes:
+      # Sans create_host_path, un minitel.yaml absent donne une erreur et pas un dossier vide.
+      - type: bind
+        source: ./minitel.yaml
+        target: /app/minitel.yaml
+        read_only: true
+        bind:
+          create_host_path: false
+    ports:
+      - "${VIDEOTEX_BIND:-127.0.0.1}:3615:3615"
+
+  # Reçoit l'appel de l'adaptateur et le passe à minitel-service par le softmodem
+  # V.23. En network_mode: host, sinon il faudrait publier toute la plage RTP et
+  # gérer le NAT du SIP. Ports utilisés : 5060/udp et 10100-10120/udp.
+  minitel-asterisk:
+    build:
+      context: ./minitel
+      target: asterisk
+    container_name: minitel-asterisk
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      - TZ=${TZ:-Europe/Paris}
+      - SIP_PASSWORD=${SIP_PASSWORD:?SIP_PASSWORD manquant, voir .env.example}
+      - LAN_CIDR=${LAN_CIDR:?LAN_CIDR manquant, voir .env.example}

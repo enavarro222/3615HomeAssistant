@@ -1,0 +1,20 @@
+configuration:
+  title:
+    name: Titre
+    description: Affiché en haut de l'écran du Minitel.
+  dashboard:
+    name: Tableau de bord
+    description: >-
+      Le tableau de bord de Home Assistant à afficher, tel qu'il apparaît dans l'adresse du navigateur
+      (maison-minitel), ou l'adresse elle-même. Vide = le tableau de bord par défaut de Home Assistant.
+  sip_password:
+    name: Mot de passe SIP
+    description: À choisir, lettres et chiffres uniquement, et à reporter dans l'adaptateur téléphonique.
+  lan_cidr:
+    name: Réseau local
+    description: Réseau autorisé à joindre Asterisk, par exemple 192.168.1.0/24. Vide = détecté automatiquement.
+  pages:
+    name: Pages
+    description: >-
+      L'ancienne façon : des pages de lumières écrites à la main. Si elles sont remplies et que le tableau de
+      bord est vide, elles remplacent le tableau de bord.

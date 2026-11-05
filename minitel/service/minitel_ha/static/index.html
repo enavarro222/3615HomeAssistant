@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>3615 Minitel</title>
+  <link rel="stylesheet" href="minitel.css">
+</head>
+<body>
+  <main>
+    <div class="minitel">
+      <div class="hood">
+        <div class="frame">
+          <span class="tab" aria-hidden="true"></span>
+          <div class="tube">
+            <canvas id="screen" width="1280" height="1000" aria-label="Écran du Minitel, 40 colonnes sur 24 rangées"></canvas>
+          </div>
+        </div>
+        <span class="knob" aria-hidden="true"></span>
+      </div>
+
+      <div class="deck">
+        <div class="upper">
+          <div class="badge"><span>MINITEL 1</span>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 9c4-5 10-5 14 0l-2.5 2-2-1.5v-2a8 8 0 0 0-5 0v2l-2 1.5Zm2 4h10l2 6H5Z"/></svg>
+          </div>
+
+          <div class="line-keys">
+            <button id="connexion" class="fn" title="F10"><small>Connexion</small><small>Fin</small></button>
+            <button class="fn inert" tabindex="-1"><small>Fnct</small></button>
+          </div>
+
+          <div class="functions">
+            <button class="fn" data-key="SOMMAIRE" title="Début"><small>Sommaire</small></button>
+            <button class="fn" data-key="ANNULATION" title="Échap ou Suppr"><small>Annulation</small></button>
+            <button class="fn" data-key="RETOUR" title="Page précédente"><small>Retour</small></button>
+            <button class="fn" data-key="REPETITION" title="F2"><small>Répétition</small></button>
+            <button class="fn" data-key="GUIDE" title="F1"><small>Guide</small></button>
+            <button class="fn" data-key="CORRECTION" title="Retour arrière"><small>Correction</small></button>
+            <button class="fn" data-key="SUITE" title="Page suivante"><small>Suite</small></button>
+            <button class="fn envoi" data-key="ENVOI" title="Entrée"><small>Envoi</small></button>
+          </div>
+
+          <div class="keypad">
+            <button class="k" data-char="1">1</button><button class="k" data-char="2">2</button><button class="k" data-char="3">3</button>
+            <button class="k" data-char="4">4</button><button class="k" data-char="5">5</button><button class="k" data-char="6">6</button>
+            <button class="k" data-char="7">7</button><button class="k" data-char="8">8</button><button class="k" data-char="9">9</button>
+            <button class="k" data-char="*">✱</button><button class="k" data-char="0">0</button><button class="k" data-char="#">#</button>
+          </div>
+        </div>
+
+        <div class="alpha">
+          <div class="row r1">
+            <button class="k label" data-code="27">Esc</button>
+            <button class="k" data-char=",">,</button><button class="k" data-char=".">.</button>
+            <button class="k" data-char="'">'</button><button class="k" data-char=";">;</button>
+            <button class="k" data-char="-">-</button><button class="k" data-char=":">:</button>
+            <button class="k" data-char="?">?</button>
+          </div>
+          <div class="row r2">
+            <button class="k" data-char="A">A</button><button class="k" data-char="Z">Z</button>
+            <button class="k" data-char="E">E</button><button class="k" data-char="R">R</button>
+            <button class="k" data-char="T">T</button><button class="k" data-char="Y">Y</button>
+            <button class="k" data-char="U">U</button><button class="k" data-char="I">I</button>
+            <button class="k" data-char="O">O</button><button class="k" data-char="P">P</button>
+          </div>
+          <div class="row r3">
+            <button class="k label ctrl inert" tabindex="-1">Ctrl</button>
+            <button class="k" data-char="Q">Q</button><button class="k" data-char="S">S</button>
+            <button class="k" data-char="D">D</button><button class="k" data-char="F">F</button>
+            <button class="k" data-char="G">G</button><button class="k" data-char="H">H</button>
+            <button class="k" data-char="J">J</button><button class="k" data-char="K">K</button>
+            <button class="k" data-char="L">L</button><button class="k" data-char="M">M</button>
+          </div>
+          <div class="row r4">
+            <button class="k shift inert" tabindex="-1" aria-label="Majuscule"></button>
+            <button class="k" data-char="W">W</button><button class="k" data-char="X">X</button>
+            <button class="k" data-char="C">C</button><button class="k" data-char="V">V</button>
+            <button class="k" data-char="B">B</button><button class="k" data-char="N">N</button>
+            <button class="k shift inert" tabindex="-1" aria-label="Majuscule"></button>
+          </div>
+          <div class="row r5">
+            <button class="k inert" tabindex="-1" aria-label="Haut">↑</button>
+            <button class="k inert" tabindex="-1" aria-label="Bas">↓</button>
+            <button class="k space" data-char=" " aria-label="Espace"></button>
+            <button class="k inert" tabindex="-1" aria-label="Gauche">←</button>
+            <button class="k inert" tabindex="-1" aria-label="Droite">→</button>
+            <button class="k enter" data-code="13" aria-label="Retour chariot">↵</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <p id="status" class="status" role="status">Appuyez sur Connexion/Fin pour appeler le 3615.</p>
+    <p class="hint">L'appel passe par Asterisk et le softmodem comme celui du vrai Minitel, à 1200 bauds dans un sens
+      et 75 dans l'autre : les touches mettent un instant à partir. Clavier : lettres et chiffres, Entrée = Envoi,
+      Retour arrière = Correction, Échap = Annulation, Page suivante / précédente = Suite / Retour, F10 = Connexion/Fin.</p>
+  </main>
+  <script src="minitel.js"></script>
+</body>
+</html>

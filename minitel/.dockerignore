@@ -1,0 +1,6 @@
+service/.venv
+service/tests
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
+**/*.egg-info

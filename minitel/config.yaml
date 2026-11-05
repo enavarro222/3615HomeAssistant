@@ -1,0 +1,31 @@
+name: 3615 Home Assistant
+version: "0.3.0"
+slug: minitel
+description: Vos tableaux de bord Home Assistant sur un vrai Minitel, par sa ligne téléphonique
+url: https://github.com/enavarro222/3615HomeAssistant
+arch:
+  - aarch64
+  - amd64
+startup: application
+boot: auto
+host_network: true
+homeassistant_api: true
+ingress: true
+ingress_port: 3616
+panel_icon: mdi:phone-classic
+panel_title: Minitel
+options:
+  title: 3615 MAISON
+  dashboard: ""
+  lan_cidr: ""
+  pages: []
+schema:
+  title: str
+  dashboard: str?
+  sip_password: password
+  lan_cidr: str?
+  pages:
+    - title: str
+      lights:
+        - name: str
+          entity: str

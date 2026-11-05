@@ -1,0 +1,23 @@
+[project]
+name = "3615-home-assistant"
+version = "0.2.0"
+description = "Piloter Home Assistant depuis un vrai Minitel, par la ligne téléphonique et 100 % en local"
+requires-python = ">=3.12"
+dependencies = ["aiohttp>=3.10,<4", "pyyaml>=6,<7"]
+
+[dependency-groups]
+dev = ["pytest>=8", "ruff>=0.6"]
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["minitel_ha"]
+
+[tool.setuptools.package-data]
+minitel_ha = ["static/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

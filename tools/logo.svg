@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="250" height="100" viewBox="0 0 250 100">
+  <!-- Icône réduite -->
+  <g transform="translate(4 6) scale(0.69)">
+    <rect x="4" y="8" width="120" height="112" rx="18" fill="#6b5038" stroke="#4a3626" stroke-width="3"/>
+    <rect x="16" y="20" width="96" height="72" rx="12" fill="#1b1d1c" stroke="#2f322f" stroke-width="2"/>
+    <text x="64" y="66" text-anchor="middle" font-family="DejaVu Sans Mono, monospace" font-weight="bold"
+          font-size="30" fill="#f2f2ea" letter-spacing="1">3615</text>
+    <rect x="94" y="72" width="10" height="4" fill="#f2f2ea"/>
+    <circle cx="64" cy="106" r="7" fill="#ffd34d"/>
+    <rect x="61" y="111" width="6" height="4" rx="1" fill="#c9b79c"/>
+  </g>
+  <text x="100" y="46" font-family="DejaVu Sans Mono, monospace" font-weight="bold" font-size="30" fill="#a07a55">3615</text>
+  <text x="100" y="72" font-family="DejaVu Sans, sans-serif" font-size="17" fill="#8a8a8a">Home Assistant</text>
+</svg>
