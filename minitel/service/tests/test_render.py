@@ -260,3 +260,21 @@ def test_a_graph_without_points_is_empty():
 )
 def test_scale_bounds_are_short(number, expected):
     assert render._short(number) == expected
+
+
+def test_a_statistic_shows_its_value_in_the_entity_unit():
+    item = Item("sensor.cafes", "Cafes (48 h)", "stat", stat=("change", "{}"))
+    states = {"sensor.cafes": S("10236", unit_of_measurement="tasses")}
+    [screen] = screens(View("V", (item,)), states)
+    assert not screen.numbered  # rien à commander
+    _, out = draw_with(screen, states, {item: 12.0})
+    assert out.row_text(5) == "   Cafes (48 h)".ljust(31) + "12 tasses"
+    _, out = draw_with(screen, states, {})
+    assert out.row_text(5).endswith("--")  # pas encore calculée
+
+
+def draw_with(screen, states, stats):
+    rows = render.render(screen, states, None, stats)
+    out = Screen()
+    out.feed(b"".join(vt.pos(row) + content for row, content in rows.items()))
+    return rows, out

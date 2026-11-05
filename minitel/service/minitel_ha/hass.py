@@ -158,6 +158,19 @@ class Hass:
             ]
         return history
 
+    async def statistic(self, statistic_id: str, kind: str, period: Mapping[str, Any]) -> float | None:
+        """Une statistique sur une période, comme la calcule la carte Statistique."""
+        result = await self._call(
+            {
+                "type": "recorder/statistic_during_period",
+                "statistic_id": statistic_id,
+                "types": [kind],
+                **period,
+            }
+        )
+        value = (result or {}).get(kind)
+        return float(value) if isinstance(value, (int, float)) else None
+
     # --- Connexion ---------------------------------------------------------------------------
 
     async def _run(self) -> None:

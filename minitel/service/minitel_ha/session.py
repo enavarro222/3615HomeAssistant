@@ -3,13 +3,15 @@
 L'écran suit Home Assistant en direct : à chaque changement, on recalcule les rangées et on
 n'envoie que celles qui diffèrent de ce qui est affiché. À 1200 bauds, c'est ce qui compte.
 Les courbes défilent seules, un point à la fois, et leurs entités sont relevées à chaque point
-quand la courbe est courte. Les jauges sont relevées toutes les 10 s.
+quand la courbe est courte. Les jauges sont relevées toutes les 10 s. Les statistiques sont
+redemandées quand leur entité change, et toutes les 5 min pour suivre leur période.
 """
 
 from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 import logging
 import time
 from dataclasses import dataclass
@@ -29,6 +31,9 @@ IDLE_TIMEOUT = 600
 
 GAUGE_PERIOD = 10.0
 """Une jauge est relevée toutes les 10 s : bien des intégrations ne répondent pas plus vite."""
+
+STAT_PERIOD = 300.0
+"""Une statistique sur 48 h glissantes bouge aussi sans que son entité change."""
 
 SUBTITLE_ROW = 3
 RULE_ROW = CONTENT_TOP + CONTENT_ROWS
@@ -83,6 +88,8 @@ class Session:
         self._series: dict[str, graph.Series] = {}
         self._polls: dict[str, asyncio.Task[None]] = {}
         self._polled: dict[str, float] = {}
+        self._stats: dict[Item, float | None] = {}
+        self._stats_at = 0.0
 
     async def run(self) -> None:
         loop = asyncio.get_running_loop()
@@ -300,7 +307,7 @@ class Session:
         screens = render.screens(view, self._hass.states)
         place.screen = min(place.screen, len(screens) - 1)
         self._screen = screens[place.screen]
-        rows = render.render(self._screen, self._hass.states, self._graph_points())
+        rows = render.render(self._screen, self._hass.states, self._graph_points(), self._stats)
         if not self._screen.lines:
             rows[CONTENT_TOP + 6] = vt.text("  Rien a afficher pour l'instant.")
         counter = f"{place.screen + 1}/{len(screens)}" if len(screens) > 1 else ""
@@ -331,7 +338,9 @@ class Session:
         self._field = ""
         self._dashboard = self._hass.dashboard
         rows = self._compose()
-        if await self._load_series():
+        series = await self._load_series()
+        stats = await self._load_stats()
+        if series or stats:
             rows = self._compose()
         page = bytearray(vt.clear())
         if not self._hass.connected:
@@ -354,6 +363,8 @@ class Session:
             await self._draw("Tableau de bord mis a jour")
             return
         self._record(batch)
+        changed = {e for event in batch if isinstance(event, frozenset) for e in event}
+        await self._load_stats(changed)
         update = bytearray()
         if Change.CONNECTION in batch:
             update += _status() if not self._hass.connected else vt.pos(0) + bytes((vt.CAN,))
@@ -446,6 +457,8 @@ class Session:
         """Attend le prochain point d'une courbe, ou le prochain relevé. Sinon, attend sans fin."""
         steps = [graph.period(item.hours) for item in self._graph_items()]
         steps += self._live().values()
+        if self._stat_items():
+            steps.append(STAT_PERIOD)
         if not steps or self._place.guide:
             await asyncio.Event().wait()
         now = time.time()
@@ -458,6 +471,8 @@ class Session:
             if now - self._polled.get(entity_id, 0) >= every * 0.9:
                 self._polled[entity_id] = now
                 self._poll(entity_id)
+        if self._stat_items() and now - self._stats_at >= STAT_PERIOD * 0.9:
+            await self._load_stats()
         windows: dict[str, float] = {}
         for item in self._graph_items():
             step = graph.period(item.hours)
@@ -467,6 +482,34 @@ class Session:
                 self._series[entity_id].forget_before(now - window)
         if not self._place.guide:
             await self._send_update(self._diff(self._compose()))
+
+    # --- Statistiques ----------------------------------------------------------------------------
+
+    def _stat_items(self) -> list[Item]:
+        return [
+            line.element
+            for line in self._screen.lines
+            if isinstance(line.element, Item) and line.element.style == "stat"
+        ]
+
+    async def _load_stats(self, entity_ids: set[str] | None = None) -> bool:
+        """Demande les statistiques de l'écran, ou celles de ces entités. Vrai s'il y en avait."""
+        items = self._stat_items()
+        self._stats = {item: value for item, value in self._stats.items() if item in items}
+        if entity_ids is None:
+            wanted = items
+            self._stats_at = time.time()
+        else:
+            wanted = [i for i in items if i.entity_id in entity_ids or i not in self._stats]
+        for item in wanted:
+            assert item.stat is not None
+            kind, period = item.stat
+            try:
+                self._stats[item] = await self._hass.statistic(item.entity_id, kind, json.loads(period))
+            except HAError as err:
+                log.warning("statistique de %s : %s", item.entity_id, err)
+                self._stats[item] = None
+        return bool(wanted)
 
     def _poll(self, entity_id: str) -> None:
         """Demande à Home Assistant de relever l'entité, sans attendre : le nouvel état suivra."""

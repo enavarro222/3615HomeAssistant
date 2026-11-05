@@ -11,6 +11,7 @@ La visibilité des cartes est gardée sous forme de conditions, évaluées avec 
 
 from __future__ import annotations
 
+import json
 from collections import Counter
 from dataclasses import dataclass, field
 from typing import Any, Iterable, Literal, Mapping
@@ -100,7 +101,10 @@ def _all(*conditions: Condition | None) -> Condition | None:
 
 # --- Ce qu'affiche une page ----------------------------------------------------------------------
 
-Style = Literal["row", "big", "bar", "graph"]
+Style = Literal["row", "big", "bar", "graph", "stat"]
+
+PERIOD_KEYS = ("calendar", "fixed_period", "rolling_window")
+"""Les périodes d'une carte Statistique, telles que les prend `recorder/statistic_during_period`."""
 
 
 @dataclass(frozen=True)
@@ -113,6 +117,7 @@ class Item:
     visible_if: Condition | None = None
     hours: float = 24  # style "graph" : la durée couverte par la courbe
     bounds: tuple[float, float] = (0, 100)  # style "bar"
+    stat: tuple[str, str] | None = None  # style "stat" : (type, période en JSON)
 
 
 @dataclass(frozen=True)
@@ -329,6 +334,8 @@ def _card(card: Mapping[str, Any], parent: Condition | None, report: _Report) ->
     if kind == "gauge" and card.get("entity"):
         bounds = (float(card.get("min", 0)), float(card.get("max", 100)))
         return [Item(card["entity"], card.get("name"), "bar", condition, bounds=bounds)]
+    if kind == "statistic" and card.get("entity"):
+        return [Item(card["entity"], _name(card), "stat", condition, stat=_stat(card))]
     if kind in _GRAPH_CARDS:
         return _graph_card(card, condition, report)
     if kind in _ENTITY_CARDS:
@@ -377,6 +384,15 @@ def _graph_card(card: Mapping[str, Any], condition: Condition | None, report: _R
         Item(item.entity_id, item.name, "graph" if index == 0 else "row", condition, hours=hours)
         for index, item in enumerate(items)
     ]
+
+
+def _stat(card: Mapping[str, Any]) -> tuple[str, str]:
+    """Le type et la période d'une carte Statistique ; par défaut, la variation sur le mois."""
+    period = card.get("period")
+    if not isinstance(period, Mapping) or not any(key in period for key in PERIOD_KEYS):
+        period = {"calendar": {"period": "month"}}
+    period = {key: value for key, value in period.items() if key in PERIOD_KEYS}
+    return str(card.get("stat_type") or "change"), json.dumps(period, sort_keys=True)
 
 
 def _hours(value: Any, default: float) -> float:

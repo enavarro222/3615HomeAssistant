@@ -23,6 +23,8 @@ class FakeHass:
         # Pour l'historique : (instant Unix, état), dans l'ordre.
         self.history: dict[str, list[tuple[float, str]]] = {}
         self.history_requests: list[dict[str, Any]] = []
+        self.statistics: dict[str, dict[str, float | None]] = {}
+        self.statistic_requests: list[dict[str, Any]] = []
         self.commands: list[str] = []
         self.connections = 0
         self._clients: set[web.WebSocketResponse] = set()
@@ -149,6 +151,10 @@ class FakeHass:
                     {"s": s, "lc": t} for t, s in before + [r for r in rows if r[0] >= start]
                 ]
             await _result(ws, msg_id, result)
+        elif kind == "recorder/statistic_during_period":
+            self.statistic_requests.append(msg)
+            values = self.statistics.get(msg["statistic_id"], {})
+            await _result(ws, msg_id, {kind_: values.get(kind_) for kind_ in msg["types"]})
         elif kind == "call_service":
             self.service_calls.append(msg)
             await _result(ws, msg_id, {"context": {"id": "x"}})

@@ -603,3 +603,27 @@ def test_a_gauge_shows_its_value_big_and_is_polled(monkeypatch):
         assert minitel.row(TOP + 2) == "    0 " + chr(0x7F) * 29 + " 1000"
 
     call(scenario, fake)
+
+
+def test_a_statistic_is_asked_again_when_its_entity_changes():
+    fake = FakeHass()
+    card = {
+        "type": "statistic",
+        "entity": "sensor.cafes",
+        "name": "Cafes (48 h)",
+        "period": {"rolling_window": {"duration": {"hours": 48}}},
+    }
+    fake.add_dashboard("maison", "Maison", {"views": [{"title": "Maison", "cards": [card]}]})
+    fake.system_data = {"default_panel": "maison"}
+    fake.states = {"sensor.cafes": ("10236", {"unit_of_measurement": "tasses"})}
+    fake.statistics = {"sensor.cafes": {"change": 12}}
+
+    async def scenario(minitel, fake):
+        assert minitel.row(TOP) == line("   Cafes (48 h)", "12 tasses")
+        assert fake.statistic_requests[0]["rolling_window"] == {"duration": {"hours": 48}}
+        fake.statistics = {"sensor.cafes": {"change": 13}}
+        await fake.set_state("sensor.cafes", "10237")
+        await minitel.settle()
+        assert minitel.row(TOP) == line("   Cafes (48 h)", "13 tasses")
+
+    call(scenario, fake)

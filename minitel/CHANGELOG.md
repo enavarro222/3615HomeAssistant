@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.0
+
+- **Cartes Statistique** : une valeur calculée par Home Assistant sur la période de la carte (48 h glissantes, le mois…), comme la variation d'un compteur. Redemandée quand l'entité change, et toutes les 5 min.
+
 ## 0.5.0
 
 - **Les courbes défilent** : le point le plus récent est toujours à droite, contre un axe qui porte l'échelle, et la durée couverte est écrite en dessous. Au plus un point toutes les 5 s.

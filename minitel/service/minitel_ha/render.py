@@ -144,8 +144,13 @@ class Mosaic(bytes):
 Graphs = Mapping[Item, Sequence[float | None]]
 """Les points de chaque courbe à l'écran, tels que `graph.points` les donne."""
 
+Stats = Mapping[Item, float | None]
+"""La valeur de chaque statistique à l'écran, telle que Home Assistant la calcule."""
 
-def render(screen: Screen, states: Mapping[str, State], graphs: Graphs | None = None) -> dict[int, bytes]:
+
+def render(
+    screen: Screen, states: Mapping[str, State], graphs: Graphs | None = None, stats: Stats | None = None
+) -> dict[int, bytes]:
     """Le contenu de chaque rangée occupée, sans le positionnement en début de rangée."""
     rows: dict[int, bytes] = {}
     row = CONTENT_TOP
@@ -165,6 +170,8 @@ def render(screen: Screen, states: Mapping[str, State], graphs: Graphs | None = 
         elif element.style == "graph":
             points = list((graphs or {}).get(element, [None] * graph.POINTS))
             rows.update(_graph(row, line, states, points))
+        elif element.style == "stat":
+            rows[row] = _item(row, line, states, _stat_value(element, states, (stats or {}).get(element)))
         else:
             rows[row] = _item(row, line, states)
         row += line.height
@@ -176,11 +183,11 @@ def is_double(content: bytes) -> bool:
     return bytes((vt.ESC, 0x4F)) in content
 
 
-def _item(row: int, line: Line, states: Mapping[str, State]) -> bytes:
+def _item(row: int, line: Line, states: Mapping[str, State], text: str | None = None) -> bytes:
     item = line.element
     assert isinstance(item, Item)
     state = states.get(item.entity_id)
-    value, active = describe(item.entity_id, state)
+    value, active = describe(item.entity_id, state) if text is None else (text, False)
     value = _fit(value, 16)
     col = vt.WIDTH - len(value) + 1
     prefix = f"{line.number:>2} " if line.number else "   "
@@ -259,6 +266,15 @@ def _short(number: float) -> str:
             break
         text = _format_number(number / divisor, f"{number / divisor:g}") + suffix
     return text
+
+
+def _stat_value(item: Item, states: Mapping[str, State], number: float | None) -> str:
+    """Une statistique, dans l'unité de son entité. Pas encore calculée : « -- »."""
+    if number is None:
+        return UNKNOWN
+    state = states.get(item.entity_id)
+    unit = state.attributes.get("unit_of_measurement") if state else None
+    return _with_unit(_format_number(number, f"{number:g}"), unit)
 
 
 def _fit(value: str, width: int) -> str:

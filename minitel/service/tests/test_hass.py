@@ -287,3 +287,20 @@ def test_history_reads_the_compact_format():
         assert request["minimal_response"] and request["no_attributes"]
 
     run(scenario, fake)
+
+
+def test_statistic_asks_for_one_type_over_the_card_period():
+    fake = make_fake()
+    fake.statistics = {"sensor.cafes": {"change": 12.0}}
+
+    async def scenario(hass, fake):
+        assert await hass.wait_ready(2)
+        period = {"rolling_window": {"duration": {"hours": 48}}}
+        assert await hass.statistic("sensor.cafes", "change", period) == 12.0
+        request = fake.statistic_requests[0]
+        assert request["statistic_id"] == "sensor.cafes"
+        assert request["types"] == ["change"]
+        assert request["rolling_window"] == {"duration": {"hours": 48}}
+        assert await hass.statistic("sensor.inconnu", "change", period) is None  # pas de statistiques
+
+    run(scenario, fake)

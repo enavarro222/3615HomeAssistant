@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 from minitel_ha.dashboard import (
@@ -400,3 +402,24 @@ def test_from_areas_without_anything():
     dashboard = from_areas("3615 MAISON", [], [], [], [], {})
     assert dashboard.views == ()
     assert dashboard.notes == ("aucune pièce n'a d'entité à afficher",)
+
+
+def test_statistic_card_keeps_its_type_and_period():
+    rolling = {"rolling_window": {"duration": {"hours": 48}}}
+    config = {
+        "views": [
+            {
+                "title": "V",
+                "cards": [
+                    {"type": "statistic", "entity": "sensor.cafes", "name": "Cafes", "period": rolling},
+                    {"type": "statistic", "entity": "sensor.gaz", "stat_type": "max"},
+                ],
+            }
+        ]
+    }
+    cafes, gaz = from_lovelace("M", config).views[0].elements
+    assert cafes == Item(
+        "sensor.cafes", "Cafes", "stat", stat=("change", json.dumps(rolling, sort_keys=True))
+    )
+    # Sans période : le mois en cours, comme la carte de Home Assistant.
+    assert gaz.stat == ("max", json.dumps({"calendar": {"period": "month"}}))

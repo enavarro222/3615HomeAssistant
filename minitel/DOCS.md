@@ -50,6 +50,7 @@ Les modifications du tableau de bord arrivent sur le Minitel en direct, sans red
 | carte Capteur | la valeur en grand ; avec un graphique, une courbe |
 | carte Graphique d'historique ou de statistiques, `mini-graph-card` | une courbe pour la première entité, les autres en lignes |
 | carte Jauge | la valeur en grand sur une jauge, relevée toutes les 10 s |
+| carte Statistique | une ligne avec la statistique calculée par Home Assistant sur la période de la carte (24 h glissantes, le mois…) |
 | piles, grilles, carte conditionnelle | leur contenu, à plat |
 | visibilité selon un état (une section « porte ouverte ») | la section apparaît et disparaît sur le Minitel |
 | cartes tierces (`custom:`) qui nomment leurs entités | une ligne par entité |
@@ -64,6 +65,12 @@ Une courbe couvre la durée de sa carte (`hours_to_show`, ou `days_to_show`) en 
 Elle part de l'historique de Home Assistant, puis défile : le point le plus récent est toujours contre l'axe, et tout glisse d'un cran vers la gauche à chaque point. Chaque point redessine la courbe, environ 160 octets, plus d'une seconde de ligne : il n'y a donc jamais plus d'un point toutes les 5 secondes.
 
 Les fractions d'heure sont acceptées : `hours_to_show: 0.25` donne un quart d'heure, un point toutes les 13 secondes. Pour une courbe courte (au plus 30 secondes par point, soit `hours_to_show: 0.56` ou moins), le Minitel demande à Home Assistant de relever l'entité à chaque point, tant que la courbe est à l'écran. Home Assistant ne relève pas une même intégration plus d'une fois toutes les 10 secondes : une courbe plus fine que ça ne montre que des paliers.
+
+#### Les statistiques
+
+Une carte Statistique donne une valeur calculée par Home Assistant sur une période : la variation d'un compteur sur 48 heures glissantes, le maximum du mois, la moyenne de la semaine. Le Minitel lit son type (`stat_type`) et sa période (`period`), et affiche la valeur sur une ligne, dans l'unité de l'entité. Il la redemande quand l'entité change, et toutes les 5 minutes pour suivre une période glissante.
+
+Home Assistant ne tient ces statistiques que pour les capteurs qui ont une `state_class` (`measurement`, `total` ou `total_increasing`). Un `counter` n'en a pas : faites-en d'abord une copie avec une entrée Modèle (capteur) qui porte `state_class: total_increasing`. Ses statistiques commencent à sa création.
 
 #### Les jauges
 
